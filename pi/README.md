@@ -7,6 +7,9 @@ This directory manages the pi settings and project-local resources used by this 
 - `pi/extensions/warp-notify.ts`
   - Sends Warp terminal notifications when pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
   - Copy or symlink it into `.pi/extensions/*.ts` when you want pi to discover it as a project-local extension.
+- `pi/extensions/skill-lifecycle-control-plane/`
+  - Adds `/skill-status`, `/skill-update`, and `/skill-remove` for safe skill/package lifecycle management.
+  - Copy or symlink it into `.pi/extensions/skill-lifecycle-control-plane/` when you want pi to discover it as a project-local extension.
 
 > Note: If the same extension also exists in `~/.pi/agent/extensions/`, notifications may fire twice. Remove the global copy if you want to use only this repo-managed version.
 >
