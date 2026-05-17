@@ -46,6 +46,34 @@ pi install npm:pi-mcp-adapter
 
 Restart pi after installation. The adapter reads standard MCP config files such as `.mcp.json` and `~/.config/mcp/mcp.json`; run `/mcp setup` inside pi to inspect or import host-specific MCP configs.
 
+## Skill lifecycle control plane
+
+This repo includes a project-local Pi extension for inspecting and safely managing Pi skill/package lifecycle targets.
+
+Commands:
+
+```text
+/skill-status <target>   # inspect owner/source/resources/actions without mutation
+/skill-update <target>   # show an update plan, then apply only supported targets after confirmation
+/skill-remove <target>   # show a removal plan, then apply only supported targets after confirmation
+```
+
+V1 support matrix:
+
+| Target | Status | Update | Remove |
+|---|---|---|---|
+| `compound-engineering` | Supported | Supported after plan confirmation | Guidance-only |
+| Compound member (`ce-*`, `lfg`) | Supported as bundle-owned | Guidance to `compound-engineering` | Guidance-only |
+| Pi package from `pi list` | Supported | Guidance-only | Supported after confirmation |
+| `npx skills` skill such as `agent-browser` | Supported from local lock/provenance | Guidance-only | Guidance-only unless a Pi-visibility-only removal path is verified |
+
+Safety defaults:
+
+- Status and completions are local/read-only; they do not run `npx`, `bunx`, `pi update`, or `pi remove`.
+- Mutating commands require confirmation and use the same status resolver before applying anything.
+- Homebrew CLIs and other agents' skill bindings are not removed by default.
+- Resource-changing commands write a short receipt and reload Pi so the current session reflects updated skills.
+
 ## Compound Engineering
 
 Install the Compound Engineering skills and subagents bundle with `compound-plugin`.
@@ -148,6 +176,8 @@ npx skills add https://github.com/aidenybai/react-doctor --skill react-doctor --
 ## Security notes
 
 pi extensions and skills can run with local permissions or instruct the model to execute commands. Review third-party packages and skills before installing them, and enable automatic updates only for resources you trust.
+
+Lifecycle commands are intentionally plan-first: status/completion is read-only, and update/remove actions run only after explicit confirmation.
 
 ## Prompts to paste into a Pi agent
 
