@@ -4,9 +4,9 @@ This directory manages the pi settings and project-local resources used by this 
 
 ## What this repo manages
 
-- `.pi/extensions/warp-notify.ts`
+- `pi/extensions/warp-notify.ts`
   - Sends Warp terminal notifications when pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
-  - pi automatically discovers `.pi/extensions/*.ts` as project-local extensions.
+  - Copy or symlink it into `.pi/extensions/*.ts` when you want pi to discover it as a project-local extension.
 
 > Note: If the same extension also exists in `~/.pi/agent/extensions/`, notifications may fire twice. Remove the global copy if you want to use only this repo-managed version.
 >
@@ -154,7 +154,7 @@ pi extensions and skills can run with local permissions or instruct the model to
 Use one of these prompts when setting up a new machine or a fresh checkout.
 
 ```text
-Read this repo's .pi/README.md and check which pi setup steps are needed on this machine.
+Read this repo's pi/README.md and check which pi setup steps are needed on this machine.
 Before running any install commands, summarize the missing required packages, skills, and CLIs, then ask for confirmation.
 Do not modify items that are already installed. Also check whether a global warp-notify extension exists and could be loaded twice.
 ```
@@ -162,7 +162,7 @@ Do not modify items that are already installed. Also check whether a global warp
 For a full setup handoff:
 
 ```text
-Configure the pi environment using the quick setup section in .pi/README.md.
+Configure the pi environment using the quick setup section in pi/README.md.
 Check whether each item is already installed first, and install only the missing items.
 After setup, verify with pi list, npx skills list -g --agent pi, and agent-browser --version.
 ```
@@ -170,6 +170,6 @@ After setup, verify with pi list, npx skills list -g --agent pi, and agent-brows
 For updates only:
 
 ```text
-Use .pi/README.md to update the currently installed pi packages, global skills, and agent-browser.
+Use pi/README.md to update the currently installed pi packages, global skills, and agent-browser.
 Summarize versions before and after the update. Do not modify pinned packages or items that require manual review; report them instead.
 ```
