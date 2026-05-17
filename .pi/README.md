@@ -21,6 +21,7 @@ These packages are currently used by the global pi setup.
 ```bash
 pi install npm:pi-subagents
 pi install npm:pi-ask-user
+pi install npm:pi-mcp-adapter
 ```
 
 Verify:
@@ -34,6 +35,16 @@ Update:
 ```bash
 pi update --extensions
 ```
+
+## MCP adapter
+
+Install `pi-mcp-adapter` to use MCP servers from pi without loading every MCP tool definition into the context window.
+
+```bash
+pi install npm:pi-mcp-adapter
+```
+
+Restart pi after installation. The adapter reads standard MCP config files such as `.mcp.json` and `~/.config/mcp/mcp.json`; run `/mcp setup` inside pi to inspect or import host-specific MCP configs.
 
 ## Compound Engineering
 
@@ -115,6 +126,7 @@ npx skills update -g -y
 # 1. pi package dependencies
 pi install npm:pi-subagents
 pi install npm:pi-ask-user
+pi install npm:pi-mcp-adapter
 
 # 2. Compound Engineering
 bunx @every-env/compound-plugin install compound-engineering --to pi
