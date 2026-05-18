@@ -30,13 +30,13 @@ Install or refresh these extensions globally with:
 ```bash
 mkdir -p ~/.pi/agent/extensions
 rm -rf ~/.pi/agent/extensions/skill-lifecycle-control-plane  # old name before skill-manager
-rsync -a --delete pi/extensions/ ~/.pi/agent/extensions/
+rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
 ```
 
 Verify the global copy is in sync; no output means there is no drift:
 
 ```bash
-rsync -ain --delete pi/extensions/ ~/.pi/agent/extensions/
+rsync -ain --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
 ```
 
 Restart pi after extension changes so loaded commands and tools refresh.
@@ -238,7 +238,7 @@ pi install npm:pi-mcp-adapter
 # 2. Global extensions tracked by this repo
 mkdir -p ~/.pi/agent/extensions
 rm -rf ~/.pi/agent/extensions/skill-lifecycle-control-plane
-rsync -a --delete pi/extensions/ ~/.pi/agent/extensions/
+rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
 
 # 3. Compound Engineering
 bunx @every-env/compound-plugin install compound-engineering --to pi
@@ -278,7 +278,7 @@ For a full setup handoff:
 ```text
 Configure the pi environment using the quick setup section in pi/README.md.
 Check whether each item is already installed or in sync first, and install or sync only the missing/drifted items.
-After setup, verify with pi list, rsync -ain --delete pi/extensions/ ~/.pi/agent/extensions/, npx skills list -g --agent pi, and agent-browser --version.
+After setup, verify with pi list, rsync -ain --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/, npx skills list -g --agent pi, and agent-browser --version.
 ```
 
 For updates only:

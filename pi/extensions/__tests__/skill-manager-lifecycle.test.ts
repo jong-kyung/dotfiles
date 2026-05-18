@@ -17,7 +17,7 @@ import {
 	withLifecycleLock,
 	type PathsConfig,
 	type Resolution,
-} from "./lifecycle";
+} from "../skill-manager/lifecycle";
 
 function fixturePaths(): PathsConfig {
 	const root = mkdtempSync(join(tmpdir(), "skill-lifecycle-test-"));

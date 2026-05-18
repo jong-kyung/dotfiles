@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addUserSkillExclude, parseRemoveArgs } from "./index";
+import { addUserSkillExclude, parseRemoveArgs } from "../skill-manager/index";
 
 function tempSettingsPath(): string {
 	const root = mkdtempSync(join(tmpdir(), "skill-manager-index-test-"));
