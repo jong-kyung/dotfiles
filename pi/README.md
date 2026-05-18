@@ -16,8 +16,8 @@ This repo tracks the Pi extensions used by the local global setup so they can be
   - Adds `/files` plus file-navigation shortcuts for browsing git/session files, opening/revealing files, adding file mentions, and viewing diffs.
 - `pi/extensions/loop.ts`
   - Adds `/loop` and the `signal_loop_success` tool for follow-up loops that run until a breakout condition is met.
-- `pi/extensions/warp-notify.ts`
-  - Sends Warp terminal notifications when Pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
+- `pi/extensions/notify.ts`
+  - Sends terminal-native notifications when Pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
 - `pi/extensions/rtk-rewrite.ts`
   - Rewrites bash tool commands through `rtk rewrite` when RTK is installed, reducing noisy command output.
 - `pi/extensions/session-breakdown.ts`
@@ -42,6 +42,27 @@ rsync -ain --delete pi/extensions/ ~/.pi/agent/extensions/
 Restart pi after extension changes so loaded commands and tools refresh.
 
 For project-local usage, copy or symlink individual files into `.pi/extensions/` instead.
+
+## Terminal-native notifications
+
+`pi/extensions/notify.ts` emits one selected native terminal notification path per event. It does not broadcast multiple protocols, and it intentionally no-ops for unsupported or ambiguous terminal signals to avoid raw escape output.
+
+| Terminal family | Representative signal | Native path | Status |
+| --- | --- | --- | --- |
+| Warp | `TERM_PROGRAM=WarpTerminal` | OSC 777 | Preserves existing Warp behavior |
+| Ghostty | `TERM=xterm-ghostty`, `TERM_PROGRAM=ghostty`, or `GHOSTTY_*` env | OSC 9 | Implemented from Ghostty's documented desktop-notification protocol; live visual validation still depends on Ghostty notification settings and OS focus/DND policy |
+| WezTerm | `WEZTERM_*` env or `TERM_PROGRAM=WezTerm` | OSC 777 | Supported when WezTerm notification handling is enabled |
+| iTerm2 | `TERM_PROGRAM=iTerm.app` | OSC 9 | Supported through iTerm2's native notification escape |
+| Kitty | `KITTY_WINDOW_ID` or Kitty terminfo | OSC 99 | Separate Kitty-family path |
+| rxvt/urxvt | rxvt/urxvt terminfo | OSC 777 | Best-effort protocol-family support; narrow or remove this claim if representative validation fails |
+
+Limitations:
+
+- There is no OS-level notifier fallback and no user-configurable notifier command in this version.
+- tmux, screen, ssh, remote shells, and terminal gateways are not guaranteed. A strong terminal-specific signal can still select its native path inside a multiplexer, but passthrough settings may prevent delivery.
+- Terminal and OS notification permissions, focus rules, and Do Not Disturb settings can still suppress visible notifications.
+- If multiple terminal-specific signals conflict, Pi treats the session as unsupported and writes nothing.
+
 
 ## Required pi packages
 
