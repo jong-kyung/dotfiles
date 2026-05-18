@@ -33,6 +33,14 @@ rm -rf ~/.pi/agent/extensions/skill-lifecycle-control-plane  # old name before s
 rsync -a --delete pi/extensions/ ~/.pi/agent/extensions/
 ```
 
+Verify the global copy is in sync; no output means there is no drift:
+
+```bash
+rsync -ain --delete pi/extensions/ ~/.pi/agent/extensions/
+```
+
+Restart pi after extension changes so loaded commands and tools refresh.
+
 For project-local usage, copy or symlink individual files into `.pi/extensions/` instead.
 
 ## Required pi packages
@@ -208,7 +216,8 @@ pi install npm:pi-mcp-adapter
 
 # 2. Global extensions tracked by this repo
 mkdir -p ~/.pi/agent/extensions
-rsync -a pi/extensions/ ~/.pi/agent/extensions/
+rm -rf ~/.pi/agent/extensions/skill-lifecycle-control-plane
+rsync -a --delete pi/extensions/ ~/.pi/agent/extensions/
 
 # 3. Compound Engineering
 bunx @every-env/compound-plugin install compound-engineering --to pi
@@ -239,21 +248,21 @@ Use one of these prompts when setting up a new machine or a fresh checkout.
 
 ```text
 Read this repo's pi/README.md and check which pi setup steps are needed on this machine.
-Before running any install commands, summarize the missing required packages, skills, and CLIs, then ask for confirmation.
-Do not modify items that are already installed.
+Before running any install or sync commands, summarize the missing or drifted required packages, global extensions, skills, and CLIs, then ask for confirmation.
+Do not modify items that are already installed or already in sync.
 ```
 
 For a full setup handoff:
 
 ```text
 Configure the pi environment using the quick setup section in pi/README.md.
-Check whether each item is already installed first, and install only the missing items.
-After setup, verify with pi list, npx skills list -g --agent pi, and agent-browser --version.
+Check whether each item is already installed or in sync first, and install or sync only the missing/drifted items.
+After setup, verify with pi list, rsync -ain --delete pi/extensions/ ~/.pi/agent/extensions/, npx skills list -g --agent pi, and agent-browser --version.
 ```
 
 For updates only:
 
 ```text
-Use pi/README.md to update the currently installed pi packages, global skills, and agent-browser.
-Summarize versions before and after the update. Do not modify pinned packages or items that require manual review; report them instead.
+Use pi/README.md to update the currently installed pi packages, global extensions, global skills, and agent-browser.
+Summarize versions before and after the update, plus extension sync status. Do not modify pinned packages or items that require manual review; report them instead.
 ```
