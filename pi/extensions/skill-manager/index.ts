@@ -1,0 +1,433 @@
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import {
+	buildRemovePlan,
+	buildUpdatePlan,
+	collectInventory,
+	defaultPaths,
+	filterCompletions,
+	formatPlan,
+	formatReceipt,
+	formatStatus,
+	makeReceipt,
+	redactDisplay,
+	readCompoundSummary,
+	readRecentReceipt,
+	resolveTarget,
+	summarizeExecResult,
+	SUPPORTED_NPX_SKILLS_CLI_VERSION,
+	withLifecycleLock,
+	type ActionPlan,
+	type ApplyResult,
+	type Inventory,
+	type NpxRemoveMode,
+} from "./lifecycle";
+
+const RECEIPT_TYPE = "skill-lifecycle-receipt";
+const LAST_SHOWN_KEY = "__pi_skill_lifecycle_last_shown_receipt__";
+function sendLifecycleMessage(pi: ExtensionAPI, ctx: { ui?: { notify(message: string, type?: "info" | "warning" | "error"): void } }, text: string, type: "info" | "warning" | "error" = "info"): void {
+	pi.sendMessage({ customType: "skill-lifecycle", content: text, display: true });
+	const title = text.split("\n").find((line) => line.trim())?.replace(/^#+\s*/, "").slice(0, 120) ?? "Skill lifecycle";
+	ctx.ui?.notify(title, type);
+}
+
+function inventoryFor(pi: ExtensionAPI, ctx: ExtensionCommandContext): Inventory {
+	return collectInventory(ctx.cwd, pi.getCommands());
+}
+
+async function confirmPlan(ctx: ExtensionCommandContext, plan: ActionPlan): Promise<boolean> {
+	if (!ctx.hasUI) return false;
+	return ctx.ui.confirm(plan.title, formatPlan(plan));
+}
+
+async function applyCompoundUpdate(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): Promise<ApplyResult> {
+	if (!plan.command) return { status: "failed", title: plan.title, changed: false, lines: ["No command was defined for this plan."] };
+
+	return withLifecycleLock(defaultPaths(ctx.cwd), async () => {
+		const paths = defaultPaths(ctx.cwd);
+		const stale = revalidatePlan(pi, ctx, plan);
+		if (stale) return stale;
+		const before = readCompoundSummary(paths);
+		const which = await pi.exec("which", [plan.command!.command], { cwd: ctx.cwd, timeout: 5_000, signal: ctx.signal });
+		if (which.code !== 0) {
+			return {
+				status: "failed",
+				title: plan.title,
+				changed: false,
+				lines: [`\`${plan.command!.command}\` executable was not found.`, ...summarizeExecResult(which.code, which.stdout, which.stderr)],
+			};
+		}
+
+		const executable = which.stdout.trim().split("\n")[0]?.trim() || plan.command!.command;
+		const highRiskOk = ctx.hasUI && await ctx.ui.confirm(
+			"Run external Compound updater?",
+			[
+				"This will execute third-party package code after your approval.",
+				`Executable: ${executable}`,
+				`Command: ${executable} ${plan.command!.args.join(" ")}`,
+				"Proceed only if you trust this source.",
+			].join("\n"),
+		);
+		if (!highRiskOk) {
+			return { status: "cancelled", title: plan.title, changed: false, lines: ["Cancelled before running external updater."] };
+		}
+
+		try {
+			const result = await pi.exec(executable, plan.command!.args, { cwd: paths.agentDir, timeout: 180_000, signal: ctx.signal });
+			const after = readCompoundSummary(paths);
+			const changed = result.code === 0 || before.raw !== after.raw;
+			const status: ApplyResult["status"] = result.code === 0 && after.exists ? "success" : "failed";
+			return {
+				status,
+				title: plan.title,
+				changed,
+				lines: [
+					`Before: manifest=${before.exists ? "present" : "missing"}, skills=${before.skills}, agents=${before.agents}`,
+					`After: manifest=${after.exists ? "present" : "missing"}, skills=${after.skills}, agents=${after.agents}`,
+					...summarizeExecResult(result.code, result.stdout, result.stderr),
+				],
+			};
+		} catch (error) {
+			const after = readCompoundSummary(paths);
+			return {
+				status: "failed",
+				title: plan.title,
+				changed: before.raw !== after.raw,
+				lines: [
+					`Before: manifest=${before.exists ? "present" : "missing"}, skills=${before.skills}, agents=${before.agents}`,
+					`After: manifest=${after.exists ? "present" : "missing"}, skills=${after.skills}, agents=${after.agents}`,
+					`error: ${errorMessage(error)}`,
+				],
+			};
+		}
+	});
+}
+
+async function applyPiPackageRemove(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): Promise<ApplyResult> {
+	if (!plan.command) return { status: "failed", title: plan.title, changed: false, lines: ["No command was defined for this plan."] };
+
+	return withLifecycleLock(defaultPaths(ctx.cwd), async () => {
+		const stale = revalidatePlan(pi, ctx, plan);
+		if (stale) return stale;
+		const before = readSettingsSnapshot(defaultPaths(ctx.cwd));
+		try {
+			const result = await pi.exec(plan.command!.command, plan.command!.args, { cwd: ctx.cwd, timeout: 120_000, signal: ctx.signal });
+			return {
+				status: result.code === 0 ? "success" : "failed",
+				title: plan.title,
+				changed: result.code === 0,
+				requiresReload: result.code === 0,
+				lines: summarizeExecResult(result.code, result.stdout, result.stderr),
+			};
+		} catch (error) {
+			const after = readSettingsSnapshot(defaultPaths(ctx.cwd));
+			const changed = before !== after;
+			return {
+				status: "failed",
+				title: plan.title,
+				changed,
+				requiresReload: changed,
+				lines: [`error: ${errorMessage(error)}`, changed ? "Settings changed before the command failed; reload is required." : "No settings change was detected after the command failed."],
+			};
+		}
+	});
+}
+
+async function applyNpxSkillMutation(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): Promise<ApplyResult> {
+	if (plan.npxRemoveMode === "pi-visibility") return applyNpxPiVisibilityRemove(pi, ctx, plan);
+	if (!plan.command) return { status: "failed", title: plan.title, changed: false, lines: ["No command was defined for this plan."] };
+
+	const highRiskOk = await confirmHighRiskCommand(ctx, "Run external npx skills update?", plan.command.display, [
+		"This can execute package-manager code and may access local credentials or files.",
+		"Proceed only if you trust this skill source.",
+	]);
+	if (!highRiskOk) return { status: "cancelled", title: plan.title, changed: false, lines: ["Cancelled before running external npx skills update."] };
+
+	return withLifecycleLock(defaultPaths(ctx.cwd), async () => {
+		const stale = revalidatePlan(pi, ctx, plan);
+		if (stale) return stale;
+		const paths = defaultPaths(ctx.cwd);
+		const before = readNpxSnapshot(paths);
+		try {
+			const packageSpec = plan.command!.args[1];
+			const version = await pi.exec(plan.command!.command, ["--yes", packageSpec, "--version"], { cwd: paths.agentDir, timeout: 30_000, signal: ctx.signal });
+			const versionLine = version.stdout.trim().split("\n")[0]?.trim() || version.stderr.trim().split("\n")[0]?.trim();
+			if (version.code !== 0 || versionLine !== SUPPORTED_NPX_SKILLS_CLI_VERSION) {
+				return {
+					status: "failed",
+					title: plan.title,
+					changed: false,
+					lines: [`Unsupported or unavailable skills CLI version: ${redactDisplay(versionLine || "unknown")}`, ...summarizeExecResult(version.code, version.stdout, version.stderr)],
+				};
+			}
+			const result = await pi.exec(plan.command!.command, plan.command!.args, { cwd: paths.agentDir, timeout: 180_000, signal: ctx.signal });
+			const after = readNpxSnapshot(paths);
+			const changed = result.code === 0 || before !== after;
+			return {
+				status: result.code === 0 ? "success" : "failed",
+				title: plan.title,
+				changed,
+				requiresReload: changed,
+				lines: [`skills CLI version: ${redactDisplay(versionLine)}`, ...summarizeExecResult(result.code, result.stdout, result.stderr)],
+			};
+		} catch (error) {
+			const after = readNpxSnapshot(paths);
+			const changed = before !== after;
+			return {
+				status: "failed",
+				title: plan.title,
+				changed,
+				requiresReload: changed,
+				lines: [`error: ${errorMessage(error)}`, changed ? "npx skill state changed before the command failed; reload is required." : "No npx skill state change was detected after the command failed."],
+			};
+		}
+	});
+}
+
+async function applyNpxPiVisibilityRemove(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): Promise<ApplyResult> {
+	const skillName = plan.candidate.npxSkill?.name;
+	if (!skillName) return { status: "failed", title: plan.title, changed: false, lines: ["No npx skill was defined for this plan."] };
+
+	return withLifecycleLock(defaultPaths(ctx.cwd), async () => {
+		const paths = defaultPaths(ctx.cwd);
+		const stale = revalidatePlan(pi, ctx, plan);
+		if (stale) return stale;
+		const result = addUserSkillExclude(paths.userSettingsPath, skillName);
+		return {
+			status: result.status,
+			title: plan.title,
+			changed: result.changed,
+			requiresReload: result.requiresReload,
+			lines: result.lines,
+		};
+	});
+}
+
+async function finishMutation(pi: ExtensionAPI, ctx: ExtensionCommandContext, result: ApplyResult): Promise<void> {
+	const text = [`## ${redactDisplay(result.title)} ${result.status}`, "", ...result.lines.map((line) => `- ${redactDisplay(line)}`)].join("\n");
+	sendLifecycleMessage(pi, ctx, text, result.status === "success" ? "info" : result.status === "cancelled" ? "warning" : "error");
+
+	if (!result.changed && !result.requiresReload) return;
+
+	const receiptTitle = result.status === "success" ? `${result.title} complete` : `${result.title} changed with ${result.status}`;
+	try {
+		pi.appendEntry(RECEIPT_TYPE, makeReceipt(receiptTitle, result.lines));
+	} catch (error) {
+		sendLifecycleMessage(pi, ctx, `## ${result.title} receipt failed\n\n- ${errorMessage(error)}\n- Resources changed; if reload succeeds, this receipt may not be replayed.`, "warning");
+	}
+
+	try {
+		await ctx.reload();
+	} catch (error) {
+		sendLifecycleMessage(pi, ctx, `## ${result.title} reload failed\n\n- ${errorMessage(error)}\n- Resources changed; run /reload manually before relying on lifecycle state.`, "error");
+	}
+}
+
+function failedApplyResult(title: string, error: unknown): ApplyResult {
+	return { status: "failed", title, changed: false, lines: [`error: ${errorMessage(error)}`] };
+}
+
+function errorMessage(error: unknown): string {
+	return redactDisplay(error instanceof Error ? error.message : String(error));
+}
+
+function readSettingsSnapshot(paths: ReturnType<typeof defaultPaths>): string {
+	return [paths.userSettingsPath, paths.projectSettingsPath].map((path) => {
+		try {
+			return existsSync(path) ? readFileSync(path, "utf8") : "";
+		} catch (error) {
+			return `error:${errorMessage(error)}`;
+		}
+	}).join("\n---\n");
+}
+
+function readNpxSnapshot(paths: ReturnType<typeof defaultPaths>): string {
+	const skillPath = join(paths.agentsDir, "skills");
+	return [paths.npxSkillLockPath, skillPath].map((path) => {
+		try {
+			const stat = existsSync(path) ? lstatSync(path) : undefined;
+			return stat ? `${path}:${stat.mtimeMs}:${stat.size}` : `${path}:missing`;
+		} catch (error) {
+			return `${path}:error:${errorMessage(error)}`;
+		}
+	}).join("\n---\n");
+}
+
+async function confirmHighRiskCommand(ctx: ExtensionCommandContext, title: string, command: string, lines: string[]): Promise<boolean> {
+	if (!ctx.hasUI) return false;
+	return ctx.ui.confirm(title, [...lines, `Command: ${command}`, "Proceed only if you trust this source."].join("\n"));
+}
+
+function revalidatePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): ApplyResult | undefined {
+	const target = plan.revalidateTarget ?? plan.candidate.displayName;
+	const resolution = resolveTarget(target, inventoryFor(pi, ctx));
+	if (resolution.status !== "resolved") {
+		return { status: "failed", title: plan.title, changed: false, lines: [`Target changed before execution: ${resolution.status}. No command was run.`] };
+	}
+	const current = resolution.candidate;
+	const expected = plan.candidate;
+	if (current.kind !== expected.kind || current.manager !== expected.manager || current.canonicalTarget !== expected.canonicalTarget || current.source !== expected.source || current.scope !== expected.scope) {
+		return { status: "failed", title: plan.title, changed: false, lines: ["Target ownership/source changed before execution. No command was run."] };
+	}
+	if (expected.npxSkill) {
+		const currentSkill = current.npxSkill;
+		if (!currentSkill?.verified) {
+			return { status: "failed", title: plan.title, changed: false, lines: ["npx skill provenance is no longer verified. No command was run."] };
+		}
+		if (currentSkill.source !== expected.npxSkill.source || currentSkill.sourceType !== expected.npxSkill.sourceType || currentSkill.sourceUrl !== expected.npxSkill.sourceUrl || currentSkill.skillPath !== expected.npxSkill.skillPath || currentSkill.skillFolderHash !== expected.npxSkill.skillFolderHash) {
+			return { status: "failed", title: plan.title, changed: false, lines: ["npx skill provenance changed before execution. No command was run."] };
+		}
+	}
+	return undefined;
+}
+
+export function addUserSkillExclude(settingsPath: string, skillName: string): { status: ApplyResult["status"]; changed: boolean; requiresReload?: boolean; lines: string[] } {
+	if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(skillName)) {
+		return { status: "failed", changed: false, lines: ["Unsafe skill name; no settings were changed."] };
+	}
+	try {
+		mkdirSync(dirname(settingsPath), { recursive: true });
+		const before = existsSync(settingsPath) ? lstatSync(settingsPath) : undefined;
+		if (before?.isSymbolicLink()) return { status: "failed", changed: false, lines: ["Refusing to modify symlinked Pi settings file."] };
+		const raw = before ? readFileSync(settingsPath, "utf8") : "{}";
+		const parsed = raw.trim() ? JSON.parse(raw) as unknown : {};
+		if (!isPlainSettingsObject(parsed)) return { status: "failed", changed: false, lines: ["Pi settings file must contain a JSON object; no settings were changed."] };
+		const existingSkills = parsed.skills;
+		if (existingSkills !== undefined && !Array.isArray(existingSkills)) return { status: "failed", changed: false, lines: ["Pi settings `skills` field must be an array; no settings were changed."] };
+		const skills = existingSkills ?? [];
+		const exclude = `-skills/${skillName}`;
+		if (skills.includes(exclude)) {
+			return { status: "success", changed: false, requiresReload: true, lines: [`Pi skill override already contains \`${exclude}\`; reload is still required to refresh current visibility.`] };
+		}
+		if (!settingsPathStillMatches(settingsPath, before)) return { status: "failed", changed: false, lines: ["Pi settings changed concurrently; no settings were changed."] };
+		parsed.skills = [...skills, exclude];
+		writeSettingsAtomically(settingsPath, `${JSON.stringify(parsed, null, "\t")}\n`);
+		return { status: "success", changed: true, requiresReload: true, lines: [`Added user-scope Pi skill override \`${exclude}\`.`] };
+	} catch (error) {
+		return { status: "failed", changed: false, lines: [`error: ${errorMessage(error)}`] };
+	}
+}
+
+function isPlainSettingsObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function settingsPathStillMatches(settingsPath: string, before: ReturnType<typeof lstatSync> | undefined): boolean {
+	if (!before) return !existsSync(settingsPath);
+	try {
+		const current = lstatSync(settingsPath);
+		return !current.isSymbolicLink() && current.dev === before.dev && current.ino === before.ino && current.mtimeMs === before.mtimeMs;
+	} catch {
+		return false;
+	}
+}
+
+function writeSettingsAtomically(settingsPath: string, content: string): void {
+	const tempPath = `${settingsPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	try {
+		writeFileSync(tempPath, content, { encoding: "utf8", flag: "wx" });
+		renameSync(tempPath, settingsPath);
+	} catch (error) {
+		try {
+			unlinkSync(tempPath);
+		} catch {
+			// Best-effort cleanup.
+		}
+		throw error;
+	}
+}
+
+export function parseRemoveArgs(args: string): { target: string; npxRemoveMode: NpxRemoveMode } {
+	const tokens = args.trim().split(/\s+/).filter(Boolean);
+	const global = tokens.includes("--global");
+	return { target: tokens.filter((token) => token !== "--global").join(" "), npxRemoveMode: global ? "global" : "pi-visibility" };
+}
+
+async function handleStatus(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string): Promise<void> {
+	const inventory = inventoryFor(pi, ctx);
+	const resolution = resolveTarget(args, inventory);
+	sendLifecycleMessage(pi, ctx, formatStatus(resolution, inventory), resolution.status === "resolved" ? "info" : "warning");
+}
+
+async function handleUpdate(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string): Promise<void> {
+	const inventory = inventoryFor(pi, ctx);
+	const resolution = resolveTarget(args, inventory);
+	if (resolution.status !== "resolved") {
+		sendLifecycleMessage(pi, ctx, formatStatus(resolution, inventory), "warning");
+		return;
+	}
+	const plan = buildUpdatePlan(resolution);
+	if (!plan.supported) {
+		sendLifecycleMessage(pi, ctx, formatPlan(plan), "warning");
+		return;
+	}
+	if (!await confirmPlan(ctx, plan)) {
+		sendLifecycleMessage(pi, ctx, `## ${plan.title} cancelled\n\nNo changes were made.`, "warning");
+		return;
+	}
+	try {
+		const result = plan.candidate.kind === "external-skill"
+			? await applyNpxSkillMutation(pi, ctx, plan)
+			: await applyCompoundUpdate(pi, ctx, plan);
+		await finishMutation(pi, ctx, result);
+	} catch (error) {
+		await finishMutation(pi, ctx, failedApplyResult(plan.title, error));
+	}
+}
+
+async function handleRemove(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string): Promise<void> {
+	const parsedArgs = parseRemoveArgs(args);
+	const inventory = inventoryFor(pi, ctx);
+	const resolution = resolveTarget(parsedArgs.target, inventory);
+	if (resolution.status !== "resolved") {
+		sendLifecycleMessage(pi, ctx, formatStatus(resolution, inventory), "warning");
+		return;
+	}
+	const plan = buildRemovePlan(resolution, { npxRemoveMode: parsedArgs.npxRemoveMode });
+	if (!plan.supported) {
+		sendLifecycleMessage(pi, ctx, formatPlan(plan), "warning");
+		return;
+	}
+	if (!await confirmPlan(ctx, plan)) {
+		sendLifecycleMessage(pi, ctx, `## ${plan.title} cancelled\n\nNo changes were made.`, "warning");
+		return;
+	}
+	try {
+		const result = plan.candidate.kind === "external-skill"
+			? await applyNpxSkillMutation(pi, ctx, plan)
+			: await applyPiPackageRemove(pi, ctx, plan);
+		await finishMutation(pi, ctx, result);
+	} catch (error) {
+		await finishMutation(pi, ctx, failedApplyResult(plan.title, error));
+	}
+}
+
+export default function skillLifecycleControlPlane(pi: ExtensionAPI) {
+	pi.on("session_start", (_event, ctx) => {
+		const receipt = readRecentReceipt(ctx.sessionManager.getBranch());
+		if (!receipt) return;
+		const store = globalThis as Record<string, unknown>;
+		if (store[LAST_SHOWN_KEY] === receipt.id) return;
+		store[LAST_SHOWN_KEY] = receipt.id;
+		sendLifecycleMessage(pi, ctx, formatReceipt(receipt), "info");
+	});
+
+	pi.registerCommand("skill-status", {
+		description: "Inspect Pi skill/package lifecycle target ownership and supported actions",
+		getArgumentCompletions: (prefix) => filterCompletions(prefix, collectInventory(process.cwd(), pi.getCommands())),
+		handler: async (args, ctx) => handleStatus(pi, ctx, args),
+	});
+
+	pi.registerCommand("skill-update", {
+		description: "Update a supported Pi skill/package lifecycle target after plan confirmation",
+		getArgumentCompletions: (prefix) => filterCompletions(prefix, collectInventory(process.cwd(), pi.getCommands())),
+		handler: async (args, ctx) => handleUpdate(pi, ctx, args),
+	});
+
+	pi.registerCommand("skill-remove", {
+		description: "Remove a supported Pi-managed lifecycle target after plan confirmation",
+		getArgumentCompletions: (prefix) => filterCompletions(prefix, collectInventory(process.cwd(), pi.getCommands())),
+		handler: async (args, ctx) => handleRemove(pi, ctx, args),
+	});
+}

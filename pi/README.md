@@ -22,14 +22,15 @@ This repo tracks the Pi extensions used by the local global setup so they can be
   - Rewrites bash tool commands through `rtk rewrite` when RTK is installed, reducing noisy command output.
 - `pi/extensions/session-breakdown.ts`
   - Adds `/session-breakdown`, an interactive usage dashboard for recent Pi sessions by model, cwd, day, time, tokens, and cost.
-- `pi/extensions/skill-lifecycle-control-plane/`
+- `pi/extensions/skill-manager/`
   - Adds `/skill-status`, `/skill-update`, and `/skill-remove` for safe skill/package lifecycle management.
 
 Install or refresh these extensions globally with:
 
 ```bash
 mkdir -p ~/.pi/agent/extensions
-rsync -a pi/extensions/ ~/.pi/agent/extensions/
+rm -rf ~/.pi/agent/extensions/skill-lifecycle-control-plane  # old name before skill-manager
+rsync -a --delete pi/extensions/ ~/.pi/agent/extensions/
 ```
 
 For project-local usage, copy or symlink individual files into `.pi/extensions/` instead.
@@ -82,7 +83,7 @@ The current local `~/.pi/agent/mcp.json` includes the Figma desktop MCP server a
 }
 ```
 
-## Skill lifecycle control plane
+## Skill manager
 
 This repo includes a project-local Pi extension for inspecting and safely managing Pi skill/package lifecycle targets.
 
@@ -91,23 +92,24 @@ Commands:
 ```text
 /skill-status <target>   # inspect owner/source/resources/actions without mutation
 /skill-update <target>   # show an update plan, then apply only supported targets after confirmation
-/skill-remove <target>   # show a removal plan, then apply only supported targets after confirmation
+/skill-remove <target> [--global]  # show a removal plan, then apply only supported targets after confirmation
 ```
 
 V1 support matrix:
 
-| Target                                     | Status                               | Update                             | Remove                                                             |
-| ------------------------------------------ | ------------------------------------ | ---------------------------------- | ------------------------------------------------------------------ |
-| `compound-engineering`                     | Supported                            | Supported after plan confirmation  | Guidance-only                                                      |
-| Compound member (`ce-*`, `lfg`)            | Supported as bundle-owned            | Guidance to `compound-engineering` | Guidance-only                                                      |
-| Pi package from `pi list`                  | Supported                            | Guidance-only                      | Supported after confirmation                                       |
-| `npx skills` skill such as `agent-browser` | Supported from local lock/provenance | Guidance-only                      | Guidance-only unless a Pi-visibility-only removal path is verified |
+| Target                                     | Status                               | Update                                                                 | Remove                                                           |
+| ------------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `compound-engineering`                     | Supported                            | Supported after plan confirmation                                      | Guidance-only                                                    |
+| Compound member (`ce-*`, `lfg`)            | Supported as bundle-owned            | Supported by updating the owning `compound-engineering` bundle         | Guidance-only                                                    |
+| Pi package from `pi list`                  | Supported                            | Guidance-only unless an exact-source/exact-scope updater is available  | Supported after confirmation                                     |
+| Safe local `npx skills` skill              | Supported from local lock/path metadata | Supported via exact `skills@1.5.7` CLI after confirmation             | Pi-visibility-only by default; `--global` remains guidance-only   |
+| Unverified `npx skills` skill              | Supported as discovered              | Guidance-only                                                          | Guidance-only                                                    |
 
 Safety defaults:
 
 - Status and completions are local/read-only; they do not run `npx`, `bunx`, `pi update`, or `pi remove`.
 - Mutating commands require confirmation and use the same status resolver before applying anything.
-- Homebrew CLIs and other agents' skill bindings are not removed by default.
+- Homebrew CLIs and unmanaged resources are not removed. Safe local `npx skills` targets default to Pi-visibility-only removal; whole-global removal remains guidance-only and should be done manually when intended.
 - Resource-changing commands write a short receipt and reload Pi so the current session reflects updated skills.
 
 ## Compound Engineering
