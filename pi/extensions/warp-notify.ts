@@ -63,7 +63,7 @@ function subagentCompletionBody(data: unknown): { title: string; body: string } 
 
 export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event) => {
-		if (event.toolName !== "ask_user") return;
+		if (event.toolName !== "ask_user" && event.toolName !== "ask_user_question") return;
 		notify("Pi needs your input", questionFromAskUserInput(event.input).slice(0, 180));
 	});
 

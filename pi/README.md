@@ -16,14 +16,12 @@ This repo tracks the Pi extensions used by the local global setup so they can be
   - Adds `/files` plus file-navigation shortcuts for browsing git/session files, opening/revealing files, adding file mentions, and viewing diffs.
 - `pi/extensions/loop.ts`
   - Adds `/loop` and the `signal_loop_success` tool for follow-up loops that run until a breakout condition is met.
-- `pi/extensions/notify.ts`
+- `pi/extensions/warp-notify.ts`
   - Sends Warp terminal notifications when Pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
 - `pi/extensions/rtk-rewrite.ts`
   - Rewrites bash tool commands through `rtk rewrite` when RTK is installed, reducing noisy command output.
 - `pi/extensions/session-breakdown.ts`
   - Adds `/session-breakdown`, an interactive usage dashboard for recent Pi sessions by model, cwd, day, time, tokens, and cost.
-- `pi/extensions/warp-notify.ts`
-  - Legacy/project-local Warp notification extension. Prefer `notify.ts` for the current global setup.
 - `pi/extensions/skill-lifecycle-control-plane/`
   - Adds `/skill-status`, `/skill-update`, and `/skill-remove` for safe skill/package lifecycle management.
 
@@ -35,12 +33,6 @@ rsync -a pi/extensions/ ~/.pi/agent/extensions/
 ```
 
 For project-local usage, copy or symlink individual files into `.pi/extensions/` instead.
-
-> Note: Do not enable both `notify.ts` and `warp-notify.ts` in the same Pi environment unless duplicate Warp notifications are desired. Prefer `notify.ts` and remove the legacy copy if needed:
->
-> ```bash
-> rm ~/.pi/agent/extensions/warp-notify.ts
-> ```
 
 ## Required pi packages
 
@@ -74,6 +66,22 @@ pi install npm:pi-mcp-adapter
 
 Restart pi after installation. The adapter reads standard MCP config files such as `.mcp.json` and `~/.config/mcp/mcp.json`; run `/mcp setup` inside pi to inspect or import host-specific MCP configs.
 
+The current local `~/.pi/agent/mcp.json` includes the Figma desktop MCP server and disables MCP tool prefixes:
+
+```json
+{
+  "settings": {
+    "toolPrefix": "none"
+  },
+  "mcpServers": {
+    "figma": {
+      "url": "http://127.0.0.1:3845/sse",
+      "directTools": true
+    }
+  }
+}
+```
+
 ## Skill lifecycle control plane
 
 This repo includes a project-local Pi extension for inspecting and safely managing Pi skill/package lifecycle targets.
@@ -88,12 +96,12 @@ Commands:
 
 V1 support matrix:
 
-| Target | Status | Update | Remove |
-|---|---|---|---|
-| `compound-engineering` | Supported | Supported after plan confirmation | Guidance-only |
-| Compound member (`ce-*`, `lfg`) | Supported as bundle-owned | Guidance to `compound-engineering` | Guidance-only |
-| Pi package from `pi list` | Supported | Guidance-only | Supported after confirmation |
-| `npx skills` skill such as `agent-browser` | Supported from local lock/provenance | Guidance-only | Guidance-only unless a Pi-visibility-only removal path is verified |
+| Target                                     | Status                               | Update                             | Remove                                                             |
+| ------------------------------------------ | ------------------------------------ | ---------------------------------- | ------------------------------------------------------------------ |
+| `compound-engineering`                     | Supported                            | Supported after plan confirmation  | Guidance-only                                                      |
+| Compound member (`ce-*`, `lfg`)            | Supported as bundle-owned            | Guidance to `compound-engineering` | Guidance-only                                                      |
+| Pi package from `pi list`                  | Supported                            | Guidance-only                      | Supported after confirmation                                       |
+| `npx skills` skill such as `agent-browser` | Supported from local lock/provenance | Guidance-only                      | Guidance-only unless a Pi-visibility-only removal path is verified |
 
 Safety defaults:
 
@@ -117,6 +125,16 @@ After installation, resources are created in these locations:
 - Manifest: `~/.pi/agent/compound-engineering/install-manifest.json`
 
 Compound Engineering uses the pi subagents and ask-user tools, so `pi-subagents` and `pi-ask-user` must also be installed.
+
+## Additional Pi-local skills
+
+The current local `~/.pi/agent/skills/` also includes these non-Compound skills:
+
+- `acli-jira` — Jira Cloud workflow guidance for Atlassian's `acli`.
+- Figma workflow skills: `figma-code-connect`, `figma-create-design-system-rules`, `figma-create-new-file`, `figma-generate-design`, `figma-generate-diagram`, `figma-generate-library`, `figma-implement-design`, `figma-use`, `figma-use-figjam`, and `generate-project-plan`.
+- `skill-review` — structured review for skill files.
+
+These are tracked as local Pi skill resources, not as npm packages in `settings.json`.
 
 ## Agent Browser
 
@@ -218,7 +236,7 @@ Use one of these prompts when setting up a new machine or a fresh checkout.
 ```text
 Read this repo's pi/README.md and check which pi setup steps are needed on this machine.
 Before running any install commands, summarize the missing required packages, skills, and CLIs, then ask for confirmation.
-Do not modify items that are already installed. Also check whether a global warp-notify extension exists and could be loaded twice.
+Do not modify items that are already installed.
 ```
 
 For a full setup handoff:
