@@ -4,14 +4,39 @@ This directory manages the pi settings and project-local resources used by this 
 
 ## What this repo manages
 
+This repo tracks the Pi extensions used by the local global setup so they can be reviewed, copied, or symlinked into another Pi environment.
+
+- `pi/extensions/btw.ts`
+  - Adds `/btw`, a side-channel assistant popover for quick questions without disrupting the main thread.
+- `pi/extensions/context.ts`
+  - Adds `/context`, a TUI overview of loaded extensions, skills, context files, token usage, and session cost.
+- `pi/extensions/control.ts`
+  - Adds session-control flags, `/control-sessions`, and optional `send_to_session` / `list_sessions` tools when Pi is launched with `--session-control`.
+- `pi/extensions/files.ts`
+  - Adds `/files` plus file-navigation shortcuts for browsing git/session files, opening/revealing files, adding file mentions, and viewing diffs.
+- `pi/extensions/loop.ts`
+  - Adds `/loop` and the `signal_loop_success` tool for follow-up loops that run until a breakout condition is met.
+- `pi/extensions/notify.ts`
+  - Sends Warp terminal notifications when Pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
+- `pi/extensions/rtk-rewrite.ts`
+  - Rewrites bash tool commands through `rtk rewrite` when RTK is installed, reducing noisy command output.
+- `pi/extensions/session-breakdown.ts`
+  - Adds `/session-breakdown`, an interactive usage dashboard for recent Pi sessions by model, cwd, day, time, tokens, and cost.
 - `pi/extensions/warp-notify.ts`
-  - Sends Warp terminal notifications when pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
-  - Copy or symlink it into `.pi/extensions/*.ts` when you want pi to discover it as a project-local extension.
+  - Legacy/project-local Warp notification extension. Prefer `notify.ts` for the current global setup.
 - `pi/extensions/skill-lifecycle-control-plane/`
   - Adds `/skill-status`, `/skill-update`, and `/skill-remove` for safe skill/package lifecycle management.
-  - Copy or symlink it into `.pi/extensions/skill-lifecycle-control-plane/` when you want pi to discover it as a project-local extension.
 
-> Note: If the same extension also exists in `~/.pi/agent/extensions/`, notifications may fire twice. Remove the global copy if you want to use only this repo-managed version.
+Install or refresh these extensions globally with:
+
+```bash
+mkdir -p ~/.pi/agent/extensions
+rsync -a pi/extensions/ ~/.pi/agent/extensions/
+```
+
+For project-local usage, copy or symlink individual files into `.pi/extensions/` instead.
+
+> Note: Do not enable both `notify.ts` and `warp-notify.ts` in the same Pi environment unless duplicate Warp notifications are desired. Prefer `notify.ts` and remove the legacy copy if needed:
 >
 > ```bash
 > rm ~/.pi/agent/extensions/warp-notify.ts
@@ -159,14 +184,18 @@ pi install npm:pi-subagents
 pi install npm:pi-ask-user
 pi install npm:pi-mcp-adapter
 
-# 2. Compound Engineering
+# 2. Global extensions tracked by this repo
+mkdir -p ~/.pi/agent/extensions
+rsync -a pi/extensions/ ~/.pi/agent/extensions/
+
+# 3. Compound Engineering
 bunx @every-env/compound-plugin install compound-engineering --to pi
 
-# 3. Browser automation
+# 4. Browser automation
 brew install agent-browser
 npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser --agent pi -g -y
 
-# 4. Other global skills
+# 5. Other global skills
 npx skills add https://github.com/vercel-labs/skills --skill find-skills --agent pi -g -y
 npx skills add https://github.com/hamsurang/kit --skill gh-cli --agent pi -g -y
 npx skills add https://github.com/vercel-labs/agent-skills \
