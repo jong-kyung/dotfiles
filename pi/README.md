@@ -95,7 +95,7 @@ Commands:
 /skill-remove <target> [--global]  # show a removal plan, then apply only supported targets after confirmation
 ```
 
-V1 support matrix:
+Support matrix:
 
 | Target                                     | Status                               | Update                                                                 | Remove                                                           |
 | ------------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |

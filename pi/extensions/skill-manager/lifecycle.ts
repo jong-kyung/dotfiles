@@ -780,7 +780,7 @@ function pluginBundleCandidate(manifest: PluginBundleManifest): Candidate {
 			{ label: "agents", count: manifest.agents.length, manager: "plugin-bundle" },
 			{ label: "manifest", path: manifest.path, manager: "plugin-bundle" },
 		],
-		notes: ["Plugin bundle status is discovered from its local manifest; update is manual/guidance-only until updater metadata exists.", "Plugin bundle removal is guidance-only in v1."],
+		notes: ["Plugin bundle status is discovered from its local manifest; update is manual/guidance-only until updater metadata exists.", "Plugin bundle removal is guidance-only until safe purge/restore semantics exist."],
 		update: "guidance-only",
 		remove: "guidance-only",
 	};
@@ -846,7 +846,7 @@ function looseSkillCandidate(skill: LooseSkill): Candidate {
 		displayName: skill.name,
 		scope: skill.scope,
 		resources: [{ label: "skill", path: skill.path, manager: "loose-skill" }],
-		notes: ["Loose skill provenance learning is deferred; mutation is unsupported in v1."],
+		notes: ["Loose skill provenance learning is deferred; mutation is unsupported."],
 		update: "unsupported",
 		remove: "unsupported",
 	};
@@ -984,7 +984,7 @@ function removeGuidance(candidate: Candidate): string[] {
 	if (candidate.kind === "bundle" || candidate.kind === "bundle-member") {
 		return ["Plugin bundle/member removal은 v1에서 guidance-only입니다.", "Plugin bundle full removal은 별도 purge/restore 설계가 필요합니다."];
 	}
-	return ["This target has no supported remove adapter in v1."];
+	return ["This target has no supported remove adapter."];
 }
 
 function formatCandidate(candidate: Candidate): string[] {
