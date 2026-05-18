@@ -12,11 +12,10 @@ import {
 	formatStatus,
 	makeReceipt,
 	redactDisplay,
-	readCompoundSummary,
 	readRecentReceipt,
 	resolveTarget,
 	summarizeExecResult,
-	SUPPORTED_NPX_SKILLS_CLI_VERSION,
+	PINNED_NPX_SKILLS_CLI_VERSION,
 	withLifecycleLock,
 	type ActionPlan,
 	type ApplyResult,
@@ -41,64 +40,43 @@ async function confirmPlan(ctx: ExtensionCommandContext, plan: ActionPlan): Prom
 	return ctx.ui.confirm(plan.title, formatPlan(plan));
 }
 
-async function applyCompoundUpdate(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): Promise<ApplyResult> {
+async function applyPiPackageUpdate(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): Promise<ApplyResult> {
 	if (!plan.command) return { status: "failed", title: plan.title, changed: false, lines: ["No command was defined for this plan."] };
+	if (isPiOffline()) {
+		return { status: "failed", title: plan.title, changed: false, lines: ["PI_OFFLINE is enabled; package update was not run."] };
+	}
+
+	const highRiskOk = await confirmHighRiskCommand(ctx, "Run external Pi package update?", plan.command.display, [
+		"This can execute package-manager code and may access local credentials or files.",
+		"Proceed only if you trust this package source.",
+	]);
+	if (!highRiskOk) return { status: "cancelled", title: plan.title, changed: false, lines: ["Cancelled before running external Pi package update."] };
 
 	return withLifecycleLock(defaultPaths(ctx.cwd), async () => {
 		const paths = defaultPaths(ctx.cwd);
 		const stale = revalidatePlan(pi, ctx, plan);
 		if (stale) return stale;
-		const before = readCompoundSummary(paths);
-		const which = await pi.exec("which", [plan.command!.command], { cwd: ctx.cwd, timeout: 5_000, signal: ctx.signal });
-		if (which.code !== 0) {
-			return {
-				status: "failed",
-				title: plan.title,
-				changed: false,
-				lines: [`\`${plan.command!.command}\` executable was not found.`, ...summarizeExecResult(which.code, which.stdout, which.stderr)],
-			};
-		}
-
-		const executable = which.stdout.trim().split("\n")[0]?.trim() || plan.command!.command;
-		const highRiskOk = ctx.hasUI && await ctx.ui.confirm(
-			"Run external Compound updater?",
-			[
-				"This will execute third-party package code after your approval.",
-				`Executable: ${executable}`,
-				`Command: ${executable} ${plan.command!.args.join(" ")}`,
-				"Proceed only if you trust this source.",
-			].join("\n"),
-		);
-		if (!highRiskOk) {
-			return { status: "cancelled", title: plan.title, changed: false, lines: ["Cancelled before running external updater."] };
-		}
-
+		const before = readSettingsSnapshot(paths);
 		try {
-			const result = await pi.exec(executable, plan.command!.args, { cwd: paths.agentDir, timeout: 180_000, signal: ctx.signal });
-			const after = readCompoundSummary(paths);
-			const changed = result.code === 0 || before.raw !== after.raw;
-			const status: ApplyResult["status"] = result.code === 0 && after.exists ? "success" : "failed";
+			const result = await pi.exec(plan.command!.command, plan.command!.args, { cwd: ctx.cwd, timeout: 180_000, signal: ctx.signal });
+			const after = readSettingsSnapshot(paths);
+			const changed = result.code === 0 || before !== after;
 			return {
-				status,
+				status: result.code === 0 ? "success" : "failed",
 				title: plan.title,
 				changed,
-				lines: [
-					`Before: manifest=${before.exists ? "present" : "missing"}, skills=${before.skills}, agents=${before.agents}`,
-					`After: manifest=${after.exists ? "present" : "missing"}, skills=${after.skills}, agents=${after.agents}`,
-					...summarizeExecResult(result.code, result.stdout, result.stderr),
-				],
+				requiresReload: result.code === 0 || before !== after,
+				lines: summarizeExecResult(result.code, result.stdout, result.stderr),
 			};
 		} catch (error) {
-			const after = readCompoundSummary(paths);
+			const after = readSettingsSnapshot(paths);
+			const changed = before !== after;
 			return {
 				status: "failed",
 				title: plan.title,
-				changed: before.raw !== after.raw,
-				lines: [
-					`Before: manifest=${before.exists ? "present" : "missing"}, skills=${before.skills}, agents=${before.agents}`,
-					`After: manifest=${after.exists ? "present" : "missing"}, skills=${after.skills}, agents=${after.agents}`,
-					`error: ${errorMessage(error)}`,
-				],
+				changed,
+				requiresReload: changed,
+				lines: [`error: ${errorMessage(error)}`, changed ? "Package state changed before the command failed; reload is required." : "No package state change was detected after the command failed."],
 			};
 		}
 	});
@@ -113,12 +91,14 @@ async function applyPiPackageRemove(pi: ExtensionAPI, ctx: ExtensionCommandConte
 		const before = readSettingsSnapshot(defaultPaths(ctx.cwd));
 		try {
 			const result = await pi.exec(plan.command!.command, plan.command!.args, { cwd: ctx.cwd, timeout: 120_000, signal: ctx.signal });
+			const after = readSettingsSnapshot(defaultPaths(ctx.cwd));
+			const changed = result.code === 0 || before !== after;
 			return {
 				status: result.code === 0 ? "success" : "failed",
 				title: plan.title,
-				changed: result.code === 0,
-				requiresReload: result.code === 0,
-				lines: summarizeExecResult(result.code, result.stdout, result.stderr),
+				changed,
+				requiresReload: changed,
+				lines: [...summarizeExecResult(result.code, result.stdout, result.stderr), ...(result.code !== 0 && before !== after ? ["Settings changed before the command failed; reload is required."] : [])],
 			};
 		} catch (error) {
 			const after = readSettingsSnapshot(defaultPaths(ctx.cwd));
@@ -137,6 +117,9 @@ async function applyPiPackageRemove(pi: ExtensionAPI, ctx: ExtensionCommandConte
 async function applyNpxSkillMutation(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): Promise<ApplyResult> {
 	if (plan.npxRemoveMode === "pi-visibility") return applyNpxPiVisibilityRemove(pi, ctx, plan);
 	if (!plan.command) return { status: "failed", title: plan.title, changed: false, lines: ["No command was defined for this plan."] };
+	if (isPiOffline()) {
+		return { status: "failed", title: plan.title, changed: false, lines: ["PI_OFFLINE is enabled; npx skills update was not run."] };
+	}
 
 	const highRiskOk = await confirmHighRiskCommand(ctx, "Run external npx skills update?", plan.command.display, [
 		"This can execute package-manager code and may access local credentials or files.",
@@ -149,11 +132,12 @@ async function applyNpxSkillMutation(pi: ExtensionAPI, ctx: ExtensionCommandCont
 		if (stale) return stale;
 		const paths = defaultPaths(ctx.cwd);
 		const before = readNpxSnapshot(paths);
+		let mutationStarted = false;
 		try {
 			const packageSpec = plan.command!.args[1];
 			const version = await pi.exec(plan.command!.command, ["--yes", packageSpec, "--version"], { cwd: paths.agentDir, timeout: 30_000, signal: ctx.signal });
 			const versionLine = version.stdout.trim().split("\n")[0]?.trim() || version.stderr.trim().split("\n")[0]?.trim();
-			if (version.code !== 0 || versionLine !== SUPPORTED_NPX_SKILLS_CLI_VERSION) {
+			if (version.code !== 0 || versionLine !== PINNED_NPX_SKILLS_CLI_VERSION) {
 				return {
 					status: "failed",
 					title: plan.title,
@@ -161,9 +145,10 @@ async function applyNpxSkillMutation(pi: ExtensionAPI, ctx: ExtensionCommandCont
 					lines: [`Unsupported or unavailable skills CLI version: ${redactDisplay(versionLine || "unknown")}`, ...summarizeExecResult(version.code, version.stdout, version.stderr)],
 				};
 			}
+			mutationStarted = true;
 			const result = await pi.exec(plan.command!.command, plan.command!.args, { cwd: paths.agentDir, timeout: 180_000, signal: ctx.signal });
 			const after = readNpxSnapshot(paths);
-			const changed = result.code === 0 || before !== after;
+			const changed = result.code === 0 || before !== after || mutationStarted;
 			return {
 				status: result.code === 0 ? "success" : "failed",
 				title: plan.title,
@@ -173,13 +158,13 @@ async function applyNpxSkillMutation(pi: ExtensionAPI, ctx: ExtensionCommandCont
 			};
 		} catch (error) {
 			const after = readNpxSnapshot(paths);
-			const changed = before !== after;
+			const changed = mutationStarted || before !== after;
 			return {
 				status: "failed",
 				title: plan.title,
 				changed,
 				requiresReload: changed,
-				lines: [`error: ${errorMessage(error)}`, changed ? "npx skill state changed before the command failed; reload is required." : "No npx skill state change was detected after the command failed."],
+				lines: [`error: ${errorMessage(error)}`, changed ? "npx skill update command started before the failure; reload is required." : "No npx skill state change was detected after the command failed."],
 			};
 		}
 	});
@@ -232,6 +217,11 @@ function errorMessage(error: unknown): string {
 	return redactDisplay(error instanceof Error ? error.message : String(error));
 }
 
+function isPiOffline(): boolean {
+	const value = process.env.PI_OFFLINE?.toLowerCase();
+	return value === "1" || value === "true" || value === "yes";
+}
+
 function readSettingsSnapshot(paths: ReturnType<typeof defaultPaths>): string {
 	return [paths.userSettingsPath, paths.projectSettingsPath].map((path) => {
 		try {
@@ -256,7 +246,7 @@ function readNpxSnapshot(paths: ReturnType<typeof defaultPaths>): string {
 
 async function confirmHighRiskCommand(ctx: ExtensionCommandContext, title: string, command: string, lines: string[]): Promise<boolean> {
 	if (!ctx.hasUI) return false;
-	return ctx.ui.confirm(title, [...lines, `Command: ${command}`, "Proceed only if you trust this source."].join("\n"));
+	return ctx.ui.confirm(title, [...lines, `Command: ${redactDisplay(command)}`, "Proceed only if you trust this source."].join("\n"));
 }
 
 function revalidatePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: ActionPlan): ApplyResult | undefined {
@@ -269,6 +259,18 @@ function revalidatePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, plan: Ac
 	const expected = plan.candidate;
 	if (current.kind !== expected.kind || current.manager !== expected.manager || current.canonicalTarget !== expected.canonicalTarget || current.source !== expected.source || current.scope !== expected.scope) {
 		return { status: "failed", title: plan.title, changed: false, lines: ["Target ownership/source changed before execution. No command was run."] };
+	}
+	if (expected.piPackage) {
+		const currentPackage = current.piPackage;
+		if (!currentPackage?.updateSupported && plan.kind === "update") {
+			return { status: "failed", title: plan.title, changed: false, lines: [currentPackage?.updateBlockedReason ? `Pi package update gate no longer passes: ${currentPackage.updateBlockedReason}` : "Pi package is no longer updateable. No command was run."] };
+		}
+		if (!currentPackage?.removeSupported && plan.kind === "remove") {
+			return { status: "failed", title: plan.title, changed: false, lines: [currentPackage?.removeBlockedReason ? `Pi package remove gate no longer passes: ${currentPackage.removeBlockedReason}` : "Pi package is no longer removable. No command was run."] };
+		}
+		if (!currentPackage || currentPackage.identity !== expected.piPackage.identity || currentPackage.sourceType !== expected.piPackage.sourceType || currentPackage.filtered !== expected.piPackage.filtered || currentPackage.pinned !== expected.piPackage.pinned) {
+			return { status: "failed", title: plan.title, changed: false, lines: ["Pi package identity changed before execution. No command was run."] };
+		}
 	}
 	if (expected.npxSkill) {
 		const currentSkill = current.npxSkill;
@@ -369,7 +371,9 @@ async function handleUpdate(pi: ExtensionAPI, ctx: ExtensionCommandContext, args
 	try {
 		const result = plan.candidate.kind === "external-skill"
 			? await applyNpxSkillMutation(pi, ctx, plan)
-			: await applyCompoundUpdate(pi, ctx, plan);
+			: plan.candidate.kind === "pi-package"
+				? await applyPiPackageUpdate(pi, ctx, plan)
+				: { status: "failed", title: plan.title, changed: false, lines: ["No update executor is available for this target."] } satisfies ApplyResult;
 		await finishMutation(pi, ctx, result);
 	} catch (error) {
 		await finishMutation(pi, ctx, failedApplyResult(plan.title, error));

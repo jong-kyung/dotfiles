@@ -99,9 +99,11 @@ V1 support matrix:
 
 | Target                                     | Status                               | Update                                                                 | Remove                                                           |
 | ------------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `compound-engineering`                     | Supported                            | Supported after plan confirmation                                      | Guidance-only                                                    |
-| Compound member (`ce-*`, `lfg`)            | Supported as bundle-owned            | Supported by updating the owning `compound-engineering` bundle         | Guidance-only                                                    |
-| Pi package from `pi list`                  | Supported                            | Guidance-only unless an exact-source/exact-scope updater is available  | Supported after confirmation                                     |
+| Discovered plugin bundle                   | Supported from `install-manifest.json` | Guidance-only; update manually unless updater metadata exists          | Guidance-only                                                    |
+| Plugin bundle member                       | Supported as bundle-owned            | Guidance-only via owning bundle; update manually                       | Guidance-only                                                    |
+| Exact-one unpinned npm/git Pi package      | Supported                            | Supported after plan and high-risk confirmation                        | Supported after confirmation                                     |
+| Pinned or local exact-one Pi package        | Supported as discovered        | Guidance-only                                                          | Supported after confirmation                                     |
+| Duplicate or ambiguous Pi package           | Supported as discovered        | Guidance-only                                                          | Guidance-only until target ownership is exact                    |
 | Safe local `npx skills` skill              | Supported from local lock/path metadata | Supported via exact `skills@1.5.7` CLI after confirmation             | Pi-visibility-only by default; `--global` remains guidance-only   |
 | Unverified `npx skills` skill              | Supported as discovered              | Guidance-only                                                          | Guidance-only                                                    |
 

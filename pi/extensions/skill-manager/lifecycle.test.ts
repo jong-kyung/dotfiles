@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,7 +32,6 @@ function fixturePaths(): PathsConfig {
 		cwd,
 		agentDir,
 		agentsDir,
-		compoundManifestPath: join(agentDir, "compound-engineering", "install-manifest.json"),
 		npxSkillLockPath: join(agentsDir, ".skill-lock.json"),
 		userSettingsPath: join(agentDir, "settings.json"),
 		projectSettingsPath: join(cwd, ".pi", "settings.json"),
@@ -45,9 +44,17 @@ function writeJson(path: string, value: unknown): void {
 	writeFileSync(path, JSON.stringify(value, null, 2));
 }
 
+function bundleManifestPath(paths: PathsConfig, pluginName: string): string {
+	return join(paths.agentDir, pluginName, "install-manifest.json");
+}
+
+function scopedPluginBundleManifestPath(paths: PathsConfig, scope: string, pluginName: string): string {
+	return join(paths.agentDir, scope, pluginName, "install-manifest.json");
+}
+
 function seedInventory(paths: PathsConfig): void {
-	writeJson(paths.compoundManifestPath, {
-		pluginName: "compound-engineering",
+	writeJson(bundleManifestPath(paths, "base-plugin"), {
+		pluginName: "base-plugin",
 		skills: ["ce-plan", "ce-work", "lfg"],
 		agents: ["ce-repo-research-analyst.md"],
 	});
@@ -69,20 +76,20 @@ function seedInventory(paths: PathsConfig): void {
 }
 
 describe("target resolution", () => {
-	test("resolves compound-engineering as the package-level update target", () => {
+	test("resolves installed plugin bundle as the package-level status target", () => {
 		const paths = fixturePaths();
 		seedInventory(paths);
 		const inventory = collectInventory(paths.cwd, [], paths);
-		const resolution = resolveTarget("compound-engineering", inventory);
+		const resolution = resolveTarget("base-plugin", inventory);
 
 		expect(resolution.status).toBe("resolved");
 		if (resolution.status !== "resolved") return;
 		expect(resolution.candidate.kind).toBe("bundle");
-		expect(resolution.candidate.update).toBe("supported");
+		expect(resolution.candidate.update).toBe("guidance-only");
 		expect(resolution.candidate.resources.find((resource) => resource.label === "skills")?.count).toBe(3);
 	});
 
-	test("resolves bundle members to the canonical compound owner", () => {
+	test("resolves bundle members to the canonical manifest owner", () => {
 		const paths = fixturePaths();
 		seedInventory(paths);
 		const inventory = collectInventory(paths.cwd, [], paths);
@@ -91,15 +98,74 @@ describe("target resolution", () => {
 		expect(resolution.status).toBe("resolved");
 		if (resolution.status !== "resolved") return;
 		expect(resolution.candidate.kind).toBe("bundle-member");
-		expect(resolution.candidate.canonicalTarget).toBe("compound-engineering");
+		expect(resolution.candidate.canonicalTarget).toBe("base-plugin");
 		expect(resolution.candidate.remove).toBe("guidance-only");
 		const plan = buildUpdatePlan(resolution);
-		expect(plan.supported).toBe(true);
-		expect(plan.command?.display).toBe("bunx @every-env/compound-plugin install compound-engineering --to pi");
-		expect(formatPlan(plan)).toContain("updating it refreshes the whole owning bundle");
+		expect(plan.supported).toBe(false);
+		expect(plan.guidanceOnly).toBe(true);
+		expect(plan.command).toBeUndefined();
 	});
 
-	test("keeps Compound bundle ownership ahead of loaded skill runtime commands", () => {
+	test("discovers additional plugin bundle manifests without hardcoded package names", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		writeJson(bundleManifestPath(paths, "example-plugin"), {
+			pluginName: "example-plugin",
+			skills: ["example-skill"],
+			agents: ["example-agent.md"],
+		});
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const memberResolution = resolveTarget("example-skill", inventory);
+
+		expect(memberResolution.status).toBe("resolved");
+		if (memberResolution.status !== "resolved") return;
+		expect(memberResolution.candidate.kind).toBe("bundle-member");
+		expect(memberResolution.candidate.canonicalTarget).toBe("example-plugin");
+		expect(buildUpdatePlan(memberResolution).supported).toBe(false);
+		expect(buildUpdatePlan(memberResolution).command).toBeUndefined();
+
+		const bundleResolution = resolveTarget("example-plugin", inventory);
+		expect(bundleResolution.status).toBe("resolved");
+		if (bundleResolution.status !== "resolved") return;
+		expect(buildRemovePlan(bundleResolution).supported).toBe(false);
+		expect(buildRemovePlan(memberResolution).supported).toBe(false);
+	});
+
+	test("discovers scoped plugin bundle manifests", () => {
+		const paths = fixturePaths();
+		writeJson(scopedPluginBundleManifestPath(paths, "@scope", "plugin"), { pluginName: "@scope/plugin", skills: ["scoped-skill"], agents: [] });
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("scoped-skill", inventory);
+
+		expect(resolution.status).toBe("resolved");
+		if (resolution.status !== "resolved") return;
+		expect(resolution.candidate.canonicalTarget).toBe("@scope/plugin");
+		expect(buildUpdatePlan(resolution).supported).toBe(false);
+		expect(buildUpdatePlan(resolution).command).toBeUndefined();
+	});
+
+	test("returns ambiguous for duplicate plugin bundle members", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		writeJson(bundleManifestPath(paths, "example-plugin"), { pluginName: "example-plugin", skills: ["lfg"], agents: [] });
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("lfg", inventory);
+
+		expect(resolution.status).toBe("ambiguous");
+	});
+
+	test("ignores unsafe plugin bundle names", () => {
+		const paths = fixturePaths();
+		writeJson(bundleManifestPath(paths, "bad"), { pluginName: "--bad", skills: ["bad-skill"], agents: [] });
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("bad-skill", inventory);
+
+		expect(resolution.status).toBe("unsupported");
+		expect(inventory.warnings.join("\n")).toContain("pluginName is missing or unsafe");
+		expect(formatStatus(resolution, inventory)).toContain("Warnings:");
+	});
+
+	test("keeps plugin bundle ownership ahead of loaded skill runtime commands", () => {
 		const paths = fixturePaths();
 		seedInventory(paths);
 		const commandPath = join(paths.agentDir, "skills", "lfg", "SKILL.md");
@@ -111,7 +177,7 @@ describe("target resolution", () => {
 		expect(resolution.status).toBe("resolved");
 		if (resolution.status !== "resolved") return;
 		expect(resolution.candidate.kind).toBe("bundle-member");
-		expect(resolution.candidate.manager).toBe("compound-plugin");
+		expect(resolution.candidate.manager).toBe("plugin-bundle");
 	});
 
 	test("resolves safe local npx skills with update and Pi-visibility removal supported", () => {
@@ -135,7 +201,7 @@ describe("target resolution", () => {
 		expect(globalPlan.command).toBeUndefined();
 	});
 
-	test("does not collapse Compound member completions", () => {
+	test("does not collapse plugin bundle member completions", () => {
 		const paths = fixturePaths();
 		seedInventory(paths);
 		const inventory = collectInventory(paths.cwd, [], paths);
@@ -175,15 +241,96 @@ describe("target resolution", () => {
 		expect(plan.command?.display).toBe("pi remove npm:pi-subagents");
 	});
 
-	test("does not allow non-compound mutating updates in v1", () => {
+	test("supports exact-one unpinned Pi package updates", () => {
 		const paths = fixturePaths();
 		seedInventory(paths);
 		const inventory = collectInventory(paths.cwd, [], paths);
 		const resolution = resolveTarget("pi-subagents", inventory);
 		const plan = buildUpdatePlan(resolution);
 
-		expect(plan.supported).toBe(false);
-		expect(plan.guidanceOnly).toBe(true);
+		expect(plan.supported).toBe(true);
+		expect(plan.command?.display).toBe("pi update npm:pi-subagents");
+	});
+
+	test("keeps pinned and duplicate Pi package updates guidance-only", () => {
+		const pinnedPaths = fixturePaths();
+		seedInventory(pinnedPaths);
+		writeJson(pinnedPaths.userSettingsPath, { packages: ["npm:pi-subagents@1.2.3"] });
+		let inventory = collectInventory(pinnedPaths.cwd, [], pinnedPaths);
+		let resolution = resolveTarget("pi-subagents", inventory);
+		expect(buildUpdatePlan(resolution).supported).toBe(false);
+
+		const duplicatePaths = fixturePaths();
+		seedInventory(duplicatePaths);
+		writeJson(duplicatePaths.projectSettingsPath, { packages: ["npm:pi-subagents"] });
+		inventory = collectInventory(duplicatePaths.cwd, [], duplicatePaths);
+		resolution = resolveTarget("pi-subagents", inventory);
+		expect(resolution.status).toBe("ambiguous");
+		expect(buildUpdatePlan(resolution).supported).toBe(false);
+
+		const sameSettingsDuplicatePaths = fixturePaths();
+		seedInventory(sameSettingsDuplicatePaths);
+		writeJson(sameSettingsDuplicatePaths.userSettingsPath, { packages: ["npm:pi-subagents", "npm:pi-subagents"] });
+		inventory = collectInventory(sameSettingsDuplicatePaths.cwd, [], sameSettingsDuplicatePaths);
+		resolution = resolveTarget("pi-subagents", inventory);
+		expect(resolution.status).toBe("resolved");
+		expect(buildUpdatePlan(resolution).supported).toBe(false);
+		expect(buildRemovePlan(resolution).supported).toBe(false);
+		expect(formatPlan(buildRemovePlan(resolution))).toContain("remove would not be exact-scope");
+
+		const malformedPaths = fixturePaths();
+		seedInventory(malformedPaths);
+		mkdirSync(join(malformedPaths.projectSettingsPath, ".."), { recursive: true });
+		writeFileSync(malformedPaths.projectSettingsPath, "{");
+		inventory = collectInventory(malformedPaths.cwd, [], malformedPaths);
+		resolution = resolveTarget("pi-subagents", inventory);
+		expect(buildUpdatePlan(resolution).supported).toBe(false);
+	});
+
+	test("supports unpinned git packages and blocks git refs", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		writeJson(paths.userSettingsPath, { packages: ["git:https://github.com/example/pi-plugin.git"] });
+		let inventory = collectInventory(paths.cwd, [], paths);
+		let resolution = resolveTarget("pi-plugin", inventory);
+		expect(buildUpdatePlan(resolution).supported).toBe(true);
+		expect(buildUpdatePlan(resolution).command?.display).toBe("pi update git:https://github.com/example/pi-plugin.git");
+
+		writeJson(paths.userSettingsPath, { packages: ["git:https://github.com/example/pi-plugin.git#main"] });
+		inventory = collectInventory(paths.cwd, [], paths);
+		resolution = resolveTarget("pi-plugin", inventory);
+		expect(buildUpdatePlan(resolution).supported).toBe(false);
+
+		writeJson(paths.userSettingsPath, { packages: ["git:../../local-plugin"] });
+		inventory = collectInventory(paths.cwd, [], paths);
+		resolution = resolveTarget("local-plugin", inventory);
+		expect(buildUpdatePlan(resolution).supported).toBe(false);
+		expect(formatPlan(buildUpdatePlan(resolution))).toContain("not a safe unpinned npm/git spec");
+	});
+
+	test("skips malformed npx lock entries without discarding valid skills", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		writeJson(paths.npxSkillLockPath, {
+			version: 3,
+			skills: {
+				"agent-browser": {
+					source: "vercel-labs/agent-browser",
+					sourceType: "github",
+					sourceUrl: "https://github.com/vercel-labs/agent-browser.git",
+					skillPath: "skills/agent-browser/SKILL.md",
+					skillFolderHash: "c1470a475a0472fceda2401ea6763708a91680a8",
+				},
+				bad: null,
+			},
+		});
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("agent-browser", inventory);
+
+		expect(resolution.status).toBe("resolved");
+		if (resolution.status !== "resolved") return;
+		expect(resolution.candidate.update).toBe("supported");
+		expect(inventory.warnings.join("\n")).toContain("Ignored malformed npx skills lock entry for bad");
 	});
 
 	test("rejects unsafe npx locked skill paths", () => {
@@ -223,7 +370,7 @@ describe("target resolution", () => {
 		expect(resolution.candidates.map((candidate) => candidate.manager).sort()).toEqual(["loose-skill", "npx-skills"]);
 	});
 
-	test("returns ambiguous when npx and Compound both claim a member name", () => {
+	test("returns ambiguous when npx and a plugin bundle both claim a member name", () => {
 		const paths = fixturePaths();
 		seedInventory(paths);
 		writeJson(paths.npxSkillLockPath, {
@@ -245,7 +392,7 @@ describe("target resolution", () => {
 
 		expect(resolution.status).toBe("ambiguous");
 		if (resolution.status !== "ambiguous") return;
-		expect(resolution.candidates.map((candidate) => candidate.manager).sort()).toEqual(["compound-plugin", "npx-skills"]);
+		expect(resolution.candidates.map((candidate) => candidate.manager).sort()).toEqual(["npx-skills", "plugin-bundle"]);
 	});
 
 	test("does not hide runtime commands from sibling prefix paths", () => {
@@ -281,7 +428,7 @@ describe("display redaction", () => {
 				notes: [],
 				update: "guidance-only",
 				remove: "supported",
-				piPackage: { name: "private", source, scope: "user", filtered: false, identity: "git:example.com/org/private", pinned: false },
+				piPackage: { name: "private", source, scope: "user", filtered: false, identity: "git:example.com/org/private", pinned: false, sourceType: "git", updateSupported: false, removeSupported: true },
 			},
 		};
 		const status = formatStatus(resolution, { warnings: [] } as any);
@@ -312,6 +459,15 @@ describe("lifecycle lock", () => {
 		writeFileSync(paths.lockPath, JSON.stringify({ pid: process.pid, ts: Date.now() - 60 * 60 * 1000 }));
 
 		await expect(withLifecycleLock(paths, async () => "ran")).rejects.toThrow("Another skill lifecycle mutation appears to be running");
+	});
+
+	test("recovers old malformed locks", async () => {
+		const paths = fixturePaths();
+		writeFileSync(paths.lockPath, "");
+		const old = new Date(Date.now() - 11 * 60 * 1000);
+		utimesSync(paths.lockPath, old, old);
+
+		await expect(withLifecycleLock(paths, async () => "ran")).resolves.toBe("ran");
 	});
 });
 

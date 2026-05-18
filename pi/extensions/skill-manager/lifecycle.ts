@@ -5,7 +5,7 @@ import type { SlashCommandInfo } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 export type Confidence = "exact" | "inferred" | "ambiguous" | "unsupported";
-export type Manager = "compound-plugin" | "pi-package" | "npx-skills" | "runtime-command" | "loose-skill";
+export type Manager = "plugin-bundle" | "pi-package" | "npx-skills" | "runtime-command" | "loose-skill";
 export type TargetKind = "bundle" | "bundle-member" | "pi-package" | "external-skill" | "runtime-command" | "loose-skill";
 export type MutationKind = "update" | "remove";
 export type ActionSupport = "supported" | "guidance-only" | "unsupported";
@@ -16,14 +16,13 @@ export interface PathsConfig {
 	cwd: string;
 	agentDir: string;
 	agentsDir: string;
-	compoundManifestPath: string;
 	npxSkillLockPath: string;
 	userSettingsPath: string;
 	projectSettingsPath: string;
 	lockPath: string;
 }
 
-export interface CompoundManifest {
+export interface PluginBundleManifest {
 	pluginName: string;
 	skills: string[];
 	agents: string[];
@@ -52,6 +51,11 @@ export interface PiPackage {
 	filtered: boolean;
 	identity: string;
 	pinned: boolean;
+	sourceType: "npm" | "git" | "local" | "unknown";
+	updateSupported: boolean;
+	updateBlockedReason?: string;
+	removeSupported: boolean;
+	removeBlockedReason?: string;
 }
 
 export interface RuntimeCommand {
@@ -71,7 +75,7 @@ export interface LooseSkill {
 
 export interface Inventory {
 	paths: PathsConfig;
-	compound?: CompoundManifest;
+	bundles: PluginBundleManifest[];
 	npxSkills: NpxSkill[];
 	piPackages: PiPackage[];
 	runtimeCommands: RuntimeCommand[];
@@ -140,17 +144,18 @@ interface JsonObject {
 	[key: string]: unknown;
 }
 
-const COMPOUND_PACKAGE = "compound-engineering";
-const COMPOUND_COMMAND = {
-	command: "bunx",
-	args: ["@every-env/compound-plugin", "install", COMPOUND_PACKAGE, "--to", "pi"],
-};
+function isJsonObject(value: unknown): value is JsonObject {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 const SUPPORTED_NPX_LOCK_VERSION = 3;
-export const SUPPORTED_NPX_SKILLS_CLI_VERSION = "1.5.7";
-const SUPPORTED_NPX_SKILLS_CLI_PACKAGE = `skills@${SUPPORTED_NPX_SKILLS_CLI_VERSION}`;
+export const PINNED_NPX_SKILLS_CLI_VERSION = "1.5.7";
+const PINNED_NPX_SKILLS_CLI_PACKAGE = `skills@${PINNED_NPX_SKILLS_CLI_VERSION}`;
 const SAFE_NPX_SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const SAFE_PLUGIN_BUNDLE_NAME = /^(?:@[A-Za-z0-9][A-Za-z0-9._-]*\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GITHUB_SOURCE_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const GIT_TREE_SHA_RE = /^[a-f0-9]{40}$/;
+const MALFORMED_LOCK_STALE_MS = 10 * 60 * 1000;
 
 export function defaultPaths(cwd: string): PathsConfig {
 	const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
@@ -159,7 +164,6 @@ export function defaultPaths(cwd: string): PathsConfig {
 		cwd,
 		agentDir,
 		agentsDir,
-		compoundManifestPath: join(agentDir, COMPOUND_PACKAGE, "install-manifest.json"),
 		npxSkillLockPath: join(agentsDir, ".skill-lock.json"),
 		userSettingsPath: join(agentDir, "settings.json"),
 		projectSettingsPath: join(cwd, ".pi", "settings.json"),
@@ -197,7 +201,7 @@ function displaySafePath(path: string): string {
 
 export function collectInventory(cwd: string, commands: SlashCommandInfo[] = [], paths = defaultPaths(cwd)): Inventory {
 	const warnings: string[] = [];
-	const compound = readCompoundManifest(paths.compoundManifestPath, warnings);
+	const bundles = readPluginBundleManifests(paths, warnings);
 	const npxSkills = readNpxSkillLock(paths.npxSkillLockPath, paths.agentsDir, warnings);
 	const piPackages = readPiPackages(paths, warnings);
 	const runtimeCommands = commands.map((command) => ({
@@ -208,9 +212,9 @@ export function collectInventory(cwd: string, commands: SlashCommandInfo[] = [],
 		origin: command.sourceInfo?.origin,
 		baseDir: command.sourceInfo?.baseDir,
 	}));
-	const looseSkills = collectLooseSkills(paths, compound, npxSkills);
+	const looseSkills = collectLooseSkills(paths, bundles, npxSkills);
 
-	return { paths, compound, npxSkills, piPackages, runtimeCommands, looseSkills, warnings };
+	return { paths, bundles, npxSkills, piPackages, runtimeCommands, looseSkills, warnings };
 }
 
 export function resolveTarget(input: string, inventory: Inventory): Resolution {
@@ -237,35 +241,8 @@ export function buildUpdatePlan(resolution: Resolution): ActionPlan {
 	if (resolution.status !== "resolved") return unsupportedPlan("update", resolution);
 	const candidate = resolution.candidate;
 
-	if ((candidate.kind === "bundle" || candidate.kind === "bundle-member") && candidate.canonicalTarget === COMPOUND_PACKAGE) {
-		const memberUpdate = candidate.kind === "bundle-member";
-		return {
-			kind: "update",
-			title: memberUpdate ? `Update ${candidate.displayName} via ${COMPOUND_PACKAGE}` : `Update ${COMPOUND_PACKAGE}`,
-			candidate,
-			supported: true,
-			guidanceOnly: false,
-			steps: [
-				...(memberUpdate ? [`\`${candidate.displayName}\` is owned by \`${COMPOUND_PACKAGE}\`; updating it refreshes the whole owning bundle.`] : []),
-				"Compound manifest와 관련 skills/agents 상태를 읽습니다.",
-				"신뢰 가능한 updater 실행 경로를 확인합니다.",
-				"확인 후 Compound installer를 sync/update-by-reinstall로 실행합니다.",
-				"실행 후 manifest/resources를 다시 읽고 결과를 요약합니다.",
-				"Pi resources가 바뀌었을 수 있으므로 reload receipt를 남기고 runtime을 refresh합니다.",
-			],
-			warnings: ["이 명령은 외부 package code를 실행합니다. 실행 직전 high-risk confirmation을 한 번 더 요구합니다."],
-			command: {
-				command: COMPOUND_COMMAND.command,
-				args: [...COMPOUND_COMMAND.args],
-				display: `${COMPOUND_COMMAND.command} ${COMPOUND_COMMAND.args.join(" ")}`,
-			},
-			requiresReload: true,
-			revalidateTarget: candidate.kind === "bundle-member" ? candidate.displayName : candidate.canonicalTarget,
-		};
-	}
-
 	if (candidate.kind === "external-skill" && candidate.npxSkill?.verified) {
-		const args = ["--yes", SUPPORTED_NPX_SKILLS_CLI_PACKAGE, "update", candidate.npxSkill.name, "-g", "-y"];
+		const args = ["--yes", PINNED_NPX_SKILLS_CLI_PACKAGE, "update", candidate.npxSkill.name, "-g", "-y"];
 		return {
 			kind: "update",
 			title: `Update ${candidate.displayName}`,
@@ -274,7 +251,7 @@ export function buildUpdatePlan(resolution: Resolution): ActionPlan {
 			guidanceOnly: false,
 			steps: [
 				"Safe global npx skills lock metadata and installed path are required before this plan is built.",
-				`Before mutation, run the exact \`${SUPPORTED_NPX_SKILLS_CLI_PACKAGE}\` CLI version check.`,
+				`Before mutation, run the exact \`${PINNED_NPX_SKILLS_CLI_PACKAGE}\` CLI version check.`,
 				"Run a single-skill npx skills update with non-interactive arguments.",
 				"Reload Pi after a successful update because resource content can change without settings/count changes.",
 			],
@@ -282,6 +259,27 @@ export function buildUpdatePlan(resolution: Resolution): ActionPlan {
 			command: { command: "npx", args, display: `npx ${args.join(" ")}` },
 			requiresReload: true,
 			revalidateTarget: candidate.displayName,
+		};
+	}
+
+	if (candidate.kind === "pi-package" && candidate.piPackage?.updateSupported) {
+		const args = ["update", candidate.piPackage.source];
+		return {
+			kind: "update",
+			title: `Update ${candidate.displayName}`,
+			candidate,
+			supported: true,
+			guidanceOnly: false,
+			steps: [
+				"Pi package settings에서 exact-one unpinned npm/git package entry를 확인합니다.",
+				"실행 직전 같은 source/scope/identity가 여전히 exact-one인지 재검증합니다.",
+				"확인 후 단일 source Pi package update를 실행합니다.",
+				"Package content가 바뀌었을 수 있으므로 reload receipt를 남기고 runtime을 refresh합니다.",
+			],
+			warnings: ["이 명령은 외부 package code를 실행합니다. 실행 직전 high-risk confirmation을 한 번 더 요구합니다.", ...(candidate.piPackage.filtered ? ["This package entry has filters; existing filters remain in effect after update."] : [])],
+			command: { command: "pi", args, display: `pi ${args.join(" ")}` },
+			requiresReload: true,
+			revalidateTarget: candidate.source ?? candidate.displayName,
 		};
 	}
 
@@ -301,7 +299,7 @@ export function buildRemovePlan(resolution: Resolution, options: { npxRemoveMode
 	if (resolution.status !== "resolved") return unsupportedPlan("remove", resolution);
 	const candidate = resolution.candidate;
 
-	if (candidate.kind === "pi-package" && candidate.piPackage) {
+	if (candidate.kind === "pi-package" && candidate.piPackage?.removeSupported) {
 		const args = ["remove", candidate.piPackage.source];
 		if (candidate.piPackage.scope === "project") args.push("-l");
 		return {
@@ -372,13 +370,15 @@ export function buildRemovePlan(resolution: Resolution, options: { npxRemoveMode
 
 export function formatStatus(resolution: Resolution, inventory: Inventory): string {
 	if (resolution.status === "ambiguous") {
-		return [
+		const lines = [
 			`## Skill lifecycle status: ambiguous target \`${resolution.target}\``,
 			"",
 			"Multiple candidates matched. No mutation will run until the target is disambiguated.",
 			"",
 			...resolution.candidates.flatMap((candidate) => formatCandidate(candidate).map((line) => `- ${line}`)),
-		].join("\n");
+		];
+		if (inventory.warnings.length > 0) lines.push("", "Warnings:", ...inventory.warnings.map((warning) => `- ${warning}`));
+		return lines.join("\n");
 	}
 
 	if (resolution.status === "unsupported") {
@@ -391,6 +391,7 @@ export function formatStatus(resolution: Resolution, inventory: Inventory): stri
 		} else {
 			lines.push("", "Known top-level targets:", ...completionItems(inventory).slice(0, 12).map((item) => `- \`${item.value}\` — ${item.description ?? item.label}`));
 		}
+		if (inventory.warnings.length > 0) lines.push("", "Warnings:", ...inventory.warnings.map((warning) => `- ${warning}`));
 		return lines.join("\n");
 	}
 
@@ -490,30 +491,56 @@ export function summarizeExecResult(code: number, stdout: string, stderr: string
 	return lines;
 }
 
-export function readCompoundSummary(paths: PathsConfig): { exists: boolean; raw?: string; skills: number; agents: number } {
-	const manifest = readCompoundManifest(paths.compoundManifestPath, []);
-	return {
-		exists: Boolean(manifest),
-		raw: manifest?.raw,
-		skills: manifest?.skills.length ?? 0,
-		agents: manifest?.agents.length ?? 0,
-	};
+function readPluginBundleManifests(paths: PathsConfig, warnings: string[]): PluginBundleManifest[] {
+	if (!existsSync(paths.agentDir)) return [];
+	const manifests: PluginBundleManifest[] = [];
+	try {
+		for (const entry of readdirSync(paths.agentDir, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const root = join(paths.agentDir, entry.name);
+			const manifest = readPluginBundleManifest(join(root, "install-manifest.json"), warnings);
+			if (manifest) manifests.push(manifest);
+			if (entry.name.startsWith("@")) {
+				try {
+					for (const scopedEntry of readdirSync(root, { withFileTypes: true })) {
+						if (!scopedEntry.isDirectory()) continue;
+						const scopedManifest = readPluginBundleManifest(join(root, scopedEntry.name, "install-manifest.json"), warnings);
+						if (scopedManifest) manifests.push(scopedManifest);
+					}
+				} catch {
+					// Scoped package directories are best-effort discovery.
+				}
+			}
+		}
+	} catch (error) {
+		warnings.push(`Failed to scan plugin bundle manifests at ${displayPath(paths.agentDir)}: ${error instanceof Error ? error.message : String(error)}`);
+	}
+	return manifests;
 }
 
-function readCompoundManifest(path: string, warnings: string[]): CompoundManifest | undefined {
+function readPluginBundleManifest(path: string, warnings: string[]): PluginBundleManifest | undefined {
 	if (!existsSync(path)) return undefined;
 	try {
+		const stat = lstatSync(path);
+		if (!stat.isFile() || stat.isSymbolicLink()) {
+			warnings.push(`Ignored unsafe plugin bundle manifest at ${displayPath(path)}.`);
+			return undefined;
+		}
 		const raw = readFileSync(path, "utf8");
 		const parsed = JSON.parse(raw) as { pluginName?: unknown; skills?: unknown; agents?: unknown };
+		if (typeof parsed.pluginName !== "string" || !SAFE_PLUGIN_BUNDLE_NAME.test(parsed.pluginName)) {
+			warnings.push(`Ignored plugin bundle manifest at ${displayPath(path)} because pluginName is missing or unsafe.`);
+			return undefined;
+		}
 		return {
-			pluginName: typeof parsed.pluginName === "string" ? parsed.pluginName : COMPOUND_PACKAGE,
+			pluginName: parsed.pluginName,
 			skills: Array.isArray(parsed.skills) ? parsed.skills.filter((item): item is string => typeof item === "string") : [],
 			agents: Array.isArray(parsed.agents) ? parsed.agents.filter((item): item is string => typeof item === "string") : [],
 			path,
 			raw,
 		};
 	} catch (error) {
-		warnings.push(`Failed to read Compound manifest at ${displayPath(path)}: ${error instanceof Error ? error.message : String(error)}`);
+		warnings.push(`Failed to read plugin bundle manifest at ${displayPath(path)}: ${error instanceof Error ? error.message : String(error)}`);
 		return undefined;
 	}
 }
@@ -522,9 +549,16 @@ function readNpxSkillLock(path: string, agentsDir: string, warnings: string[]): 
 	if (!existsSync(path)) return [];
 	try {
 		const lockIssues = verifyNpxLockFile(path);
-		const parsed = JSON.parse(readFileSync(path, "utf8")) as { version?: unknown; skills?: Record<string, JsonObject> };
+		const parsed = JSON.parse(readFileSync(path, "utf8")) as { version?: unknown; skills?: unknown };
 		const lockVersion = typeof parsed.version === "number" ? parsed.version : undefined;
-		return Object.entries(parsed.skills ?? {}).map(([name, info]) => {
+		const skills = isJsonObject(parsed.skills) ? parsed.skills : {};
+		if (parsed.skills !== undefined && !isJsonObject(parsed.skills)) warnings.push(`Ignored malformed npx skills lock entries at ${displayPath(path)} because skills is not an object.`);
+		return Object.entries(skills).flatMap(([name, rawInfo]) => {
+			if (!isJsonObject(rawInfo)) {
+				warnings.push(`Ignored malformed npx skills lock entry for ${name} at ${displayPath(path)}.`);
+				return [];
+			}
+			const info = rawInfo;
 			const skillPath = join(agentsDir, "skills", name);
 			const source = typeof info.source === "string" ? info.source : undefined;
 			const sourceType = typeof info.sourceType === "string" ? info.sourceType : undefined;
@@ -532,7 +566,7 @@ function readNpxSkillLock(path: string, agentsDir: string, warnings: string[]): 
 			const lockedSkillPath = typeof info.skillPath === "string" ? info.skillPath : undefined;
 			const skillFolderHash = typeof info.skillFolderHash === "string" ? info.skillFolderHash : undefined;
 			const verificationIssues = verifyNpxSkill(name, skillPath, agentsDir, lockVersion, { source, sourceType, sourceUrl, skillPath: lockedSkillPath, skillFolderHash }, lockIssues);
-			return {
+			return [{
 				name,
 				path: skillPath,
 				source,
@@ -544,7 +578,7 @@ function readNpxSkillLock(path: string, agentsDir: string, warnings: string[]): 
 				lockVersion,
 				verified: verificationIssues.length === 0,
 				verificationIssues,
-			};
+			}];
 		});
 	} catch (error) {
 		warnings.push(`Failed to read npx skills lock at ${displayPath(path)}: ${error instanceof Error ? error.message : String(error)}`);
@@ -604,29 +638,60 @@ function isSafeNpxSkillPath(skillPath: string, skillsRoot: string): { safe: bool
 }
 
 function readPiPackages(paths: PathsConfig, warnings: string[]): PiPackage[] {
-	return [...readPackagesFromSettings(paths.userSettingsPath, "user", warnings), ...readPackagesFromSettings(paths.projectSettingsPath, "project", warnings)];
+	const user = readPackagesFromSettings(paths.userSettingsPath, "user", warnings);
+	const project = readPackagesFromSettings(paths.projectSettingsPath, "project", warnings);
+	const packages = [...user.packages, ...project.packages];
+	const settingsReadFailed = user.failed || project.failed;
+	const identityCounts = new Map<string, number>();
+	for (const pkg of packages) identityCounts.set(pkg.identity, (identityCounts.get(pkg.identity) ?? 0) + 1);
+	return packages.map((pkg) => {
+		const identityCount = identityCounts.get(pkg.identity) ?? 0;
+		const updateBlockedReason = packageUpdateBlockedReason(pkg, identityCount, settingsReadFailed);
+		const removeBlockedReason = packageRemoveBlockedReason(pkg, identityCount, settingsReadFailed);
+		return { ...pkg, updateSupported: !updateBlockedReason, updateBlockedReason, removeSupported: !removeBlockedReason, removeBlockedReason };
+	});
 }
 
-function readPackagesFromSettings(path: string, scope: "user" | "project", warnings: string[]): PiPackage[] {
-	if (!existsSync(path)) return [];
+function readPackagesFromSettings(path: string, scope: "user" | "project", warnings: string[]): { packages: Array<Omit<PiPackage, "updateSupported" | "updateBlockedReason" | "removeSupported" | "removeBlockedReason">>; failed: boolean } {
+	if (!existsSync(path)) return { packages: [], failed: false };
 	try {
 		const parsed = JSON.parse(readFileSync(path, "utf8")) as { packages?: unknown[] };
-		return (parsed.packages ?? []).flatMap((entry) => {
-			const source = typeof entry === "string" ? entry : entry && typeof entry === "object" && typeof (entry as { source?: unknown }).source === "string" ? (entry as { source: string }).source : undefined;
-			if (!source) return [];
-			return [{ name: packageNameFromSource(source), source, scope, filtered: typeof entry === "object", identity: packageIdentityFromSource(source, path), pinned: isPinnedPackageSource(source) }];
-		});
+		return {
+			failed: false,
+			packages: (parsed.packages ?? []).flatMap((entry) => {
+				const source = typeof entry === "string" ? entry : entry && typeof entry === "object" && typeof (entry as { source?: unknown }).source === "string" ? (entry as { source: string }).source : undefined;
+				if (!source) return [];
+				const sourceType = packageSourceType(source);
+				return [{ name: packageNameFromSource(source), source, scope, filtered: typeof entry === "object", identity: packageIdentityFromSource(source, path), pinned: isPinnedPackageSource(source), sourceType }];
+			}),
+		};
 	} catch (error) {
 		warnings.push(`Failed to read Pi settings at ${displayPath(path)}: ${error instanceof Error ? error.message : String(error)}`);
-		return [];
+		return { packages: [], failed: true };
 	}
 }
 
-function collectLooseSkills(paths: PathsConfig, compound: CompoundManifest | undefined, npxSkills: NpxSkill[]): LooseSkill[] {
-	const compoundSkillNames = new Set(compound?.skills ?? []);
+function packageUpdateBlockedReason(pkg: Omit<PiPackage, "updateSupported" | "updateBlockedReason" | "removeSupported" | "removeBlockedReason">, identityCount: number, settingsReadFailed: boolean): string | undefined {
+	if (settingsReadFailed) return "Pi settings could not be fully read; update would be unsafe.";
+	if (identityCount !== 1) return "Package identity is configured more than once; update would not be exact-scope.";
+	if (pkg.pinned) return "Package source is pinned; automatic update is intentionally blocked.";
+	if (pkg.sourceType === "local") return "Local path packages are not updateable by Pi package manager.";
+	if (pkg.sourceType !== "npm" && pkg.sourceType !== "git") return "Package source type is not supported for automatic update.";
+	if (!isSafePackageUpdateSource(pkg.source, pkg.sourceType)) return "Package source is not a safe unpinned npm/git spec.";
+	return undefined;
+}
+
+function packageRemoveBlockedReason(pkg: Omit<PiPackage, "updateSupported" | "updateBlockedReason" | "removeSupported" | "removeBlockedReason">, identityCount: number, settingsReadFailed: boolean): string | undefined {
+	if (settingsReadFailed) return "Pi settings could not be fully read; remove would be unsafe.";
+	if (identityCount !== 1) return "Package identity is configured more than once; remove would not be exact-scope.";
+	return undefined;
+}
+
+function collectLooseSkills(paths: PathsConfig, bundles: PluginBundleManifest[], npxSkills: NpxSkill[]): LooseSkill[] {
+	const bundleSkillNames = new Set(bundles.flatMap((bundle) => bundle.skills));
 	const npxSkillNames = new Set(npxSkills.map((skill) => skill.name));
-	const roots: Array<{ path: string; scope: LooseSkill["scope"]; suppressCompound?: boolean; suppressNpx?: boolean }> = [
-		{ path: join(paths.agentDir, "skills"), scope: "pi-user", suppressCompound: true },
+	const roots: Array<{ path: string; scope: LooseSkill["scope"]; suppressBundle?: boolean; suppressNpx?: boolean }> = [
+		{ path: join(paths.agentDir, "skills"), scope: "pi-user", suppressBundle: true },
 		{ path: join(paths.agentsDir, "skills"), scope: "agents-user", suppressNpx: true },
 		{ path: join(paths.cwd, ".pi", "skills"), scope: "pi-project" },
 	];
@@ -635,7 +700,7 @@ function collectLooseSkills(paths: PathsConfig, compound: CompoundManifest | und
 		if (!existsSync(root.path)) continue;
 		try {
 			for (const name of readDirNames(root.path)) {
-				if (root.suppressCompound && compoundSkillNames.has(name)) continue;
+				if (root.suppressBundle && bundleSkillNames.has(name)) continue;
 				if (root.suppressNpx && npxSkillNames.has(name)) continue;
 				const skillPath = join(root.path, name);
 				if (existsSync(join(skillPath, "SKILL.md"))) loose.push({ name, path: skillPath, scope: root.scope });
@@ -655,9 +720,11 @@ function readDirNames(path: string): string[] {
 
 function exactCandidates(target: string, inventory: Inventory): Candidate[] {
 	const candidates: Candidate[] = [];
-	if (inventory.compound && normalizeTarget(inventory.compound.pluginName) === target) candidates.push(compoundBundleCandidate(inventory.compound));
-	const compoundMember = inventory.compound ? findCompoundMember(target, inventory.compound) : undefined;
-	if (inventory.compound && compoundMember) candidates.push(compoundMemberCandidate(inventory.compound, compoundMember));
+	for (const bundle of inventory.bundles) {
+		if (normalizeTarget(bundle.pluginName) === target) candidates.push(pluginBundleCandidate(bundle));
+		const bundleMember = findPluginBundleMember(target, bundle);
+		if (bundleMember) candidates.push(pluginBundleMemberCandidate(bundle, bundleMember));
+	}
 	for (const pkg of inventory.piPackages) {
 		if (normalizeTarget(pkg.name) === target || normalizeTarget(pkg.source) === target) candidates.push(piPackageCandidate(pkg));
 	}
@@ -669,29 +736,30 @@ function exactCandidates(target: string, inventory: Inventory): Candidate[] {
 	}
 	for (const command of inventory.runtimeCommands) {
 		const commandTarget = normalizeTarget(command.name);
-		if (commandTarget === target && !isCompoundMemberTarget(target, inventory) && !candidateAlreadyExplainsCommand(command, candidates)) candidates.push(runtimeCommandCandidate(command));
+		if (commandTarget === target && !isPluginBundleMemberTarget(target, inventory) && !candidateAlreadyExplainsCommand(command, candidates)) candidates.push(runtimeCommandCandidate(command));
 	}
 	return candidates;
 }
 
 function inferredCandidates(target: string, inventory: Inventory): Candidate[] {
 	const candidates: Candidate[] = [];
-	if (inventory.compound) {
-		const member = findCompoundMember(target, inventory.compound);
-		if (member) candidates.push(compoundMemberCandidate(inventory.compound, member));
+	for (const bundle of inventory.bundles) {
+		const member = findPluginBundleMember(target, bundle);
+		if (member) candidates.push(pluginBundleMemberCandidate(bundle, member));
 	}
 	for (const command of inventory.runtimeCommands) {
 		const commandName = normalizeTarget(command.name.replace(/^skill:/, ""));
-		if (commandName === target && !isCompoundMemberTarget(target, inventory) && !candidateAlreadyExplainsCommand(command, candidates)) candidates.push(runtimeCommandCandidate(command, "inferred"));
+		if (commandName === target && !isPluginBundleMemberTarget(target, inventory) && !candidateAlreadyExplainsCommand(command, candidates)) candidates.push(runtimeCommandCandidate(command, "inferred"));
 	}
 	return candidates;
 }
 
 function discoverableCandidates(inventory: Inventory): Candidate[] {
 	const candidates: Candidate[] = [];
-	if (inventory.compound) {
-		candidates.push(compoundBundleCandidate(inventory.compound));
-		for (const skill of inventory.compound.skills) candidates.push(compoundMemberCandidate(inventory.compound, skill));
+	for (const bundle of inventory.bundles) {
+		candidates.push(pluginBundleCandidate(bundle));
+		for (const skill of bundle.skills) candidates.push(pluginBundleMemberCandidate(bundle, skill));
+		for (const agent of bundle.agents) candidates.push(pluginBundleMemberCandidate(bundle, agent));
 	}
 	for (const pkg of inventory.piPackages) candidates.push(piPackageCandidate(pkg));
 	for (const skill of inventory.npxSkills) candidates.push(npxSkillCandidate(skill));
@@ -699,36 +767,36 @@ function discoverableCandidates(inventory: Inventory): Candidate[] {
 	return candidates;
 }
 
-function compoundBundleCandidate(manifest: CompoundManifest): Candidate {
+function pluginBundleCandidate(manifest: PluginBundleManifest): Candidate {
 	return {
 		kind: "bundle",
-		manager: "compound-plugin",
+		manager: "plugin-bundle",
 		confidence: "exact",
-		canonicalTarget: manifest.pluginName || COMPOUND_PACKAGE,
-		displayName: manifest.pluginName || COMPOUND_PACKAGE,
+		canonicalTarget: manifest.pluginName,
+		displayName: manifest.pluginName,
 		source: manifest.path,
 		resources: [
-			{ label: "skills", count: manifest.skills.length, manager: "compound-plugin" },
-			{ label: "agents", count: manifest.agents.length, manager: "compound-plugin" },
-			{ label: "manifest", path: manifest.path, manager: "compound-plugin" },
+			{ label: "skills", count: manifest.skills.length, manager: "plugin-bundle" },
+			{ label: "agents", count: manifest.agents.length, manager: "plugin-bundle" },
+			{ label: "manifest", path: manifest.path, manager: "plugin-bundle" },
 		],
-		notes: ["Compound bundle removal is guidance-only in v1."],
-		update: "supported",
+		notes: ["Plugin bundle status is discovered from its local manifest; update is manual/guidance-only until updater metadata exists.", "Plugin bundle removal is guidance-only in v1."],
+		update: "guidance-only",
 		remove: "guidance-only",
 	};
 }
 
-function compoundMemberCandidate(manifest: CompoundManifest, member: string): Candidate {
+function pluginBundleMemberCandidate(manifest: PluginBundleManifest, member: string): Candidate {
 	return {
 		kind: "bundle-member",
-		manager: "compound-plugin",
+		manager: "plugin-bundle",
 		confidence: "inferred",
-		canonicalTarget: manifest.pluginName || COMPOUND_PACKAGE,
+		canonicalTarget: manifest.pluginName,
 		displayName: member.replace(/\.md$/, ""),
 		source: manifest.path,
-		resources: [{ label: "owning bundle", path: manifest.path, manager: "compound-plugin" }],
-		notes: [`This target is owned by \`${manifest.pluginName || COMPOUND_PACKAGE}\`; update delegates to the owning bundle.`],
-		update: "supported",
+		resources: [{ label: "owning bundle", path: manifest.path, manager: "plugin-bundle" }],
+		notes: [`This target is owned by \`${manifest.pluginName}\`; update is manual/guidance-only until the owning bundle declares updater metadata.`],
+		update: "guidance-only",
 		remove: "guidance-only",
 	};
 }
@@ -743,9 +811,12 @@ function piPackageCandidate(pkg: PiPackage): Candidate {
 		source: pkg.source,
 		scope: pkg.scope,
 		resources: [{ label: "package source", path: pkg.source, manager: "pi-package" }],
-		notes: [pkg.pinned ? "Pi package source is pinned; update remains guidance-only." : "Pi package update requires an exact-source/exact-scope updater; current CLI matching is guidance-only.", "Pi package remove is supported after confirmation."],
-		update: "guidance-only",
-		remove: "supported",
+		notes: [
+			pkg.updateSupported ? "Unpinned npm/git Pi package has exact-one identity; update is supported after confirmation." : pkg.updateBlockedReason ?? "Pi package update is guidance-only.",
+			pkg.removeSupported ? "Pi package remove is supported after confirmation." : pkg.removeBlockedReason ?? "Pi package remove is guidance-only.",
+		],
+		update: pkg.updateSupported ? "supported" : "guidance-only",
+		remove: pkg.removeSupported ? "supported" : "guidance-only",
 		piPackage: pkg,
 	};
 }
@@ -759,7 +830,7 @@ function npxSkillCandidate(skill: NpxSkill): Candidate {
 		displayName: skill.name,
 		source: skill.sourceUrl ?? skill.source,
 		resources: [{ label: "skill", path: skill.path, manager: "npx-skills" }],
-		notes: skill.verified ? [`Safe local npx skill metadata was found; update uses exact \`${SUPPORTED_NPX_SKILLS_CLI_PACKAGE}\`, and removal is Pi-visibility-only by default.`] : ["npx skill provenance is incomplete or unsafe; mutation remains guidance-only.", ...skill.verificationIssues],
+		notes: skill.verified ? [`Safe local npx skill metadata was found; update uses exact \`${PINNED_NPX_SKILLS_CLI_PACKAGE}\`, and removal is Pi-visibility-only by default.`] : ["npx skill provenance is incomplete or unsafe; mutation remains guidance-only.", ...skill.verificationIssues],
 		update: skill.verified ? "supported" : "guidance-only",
 		remove: skill.verified ? "supported" : "guidance-only",
 		npxSkill: skill,
@@ -802,11 +873,11 @@ function candidateAlreadyExplainsCommand(command: RuntimeCommand, candidates: Ca
 	return candidates.some((candidate) => candidate.resources.some((resource) => resource.path && pathContains(resource.path, command.path!)));
 }
 
-function isCompoundMemberTarget(target: string, inventory: Inventory): boolean {
-	return Boolean(inventory.compound && findCompoundMember(target, inventory.compound));
+function isPluginBundleMemberTarget(target: string, inventory: Inventory): boolean {
+	return inventory.bundles.some((bundle) => Boolean(findPluginBundleMember(target, bundle)));
 }
 
-function findCompoundMember(target: string, manifest: CompoundManifest): string | undefined {
+function findPluginBundleMember(target: string, manifest: PluginBundleManifest): string | undefined {
 	return manifest.skills.find((name) => normalizeTarget(name) === target) ?? manifest.agents.find((name) => normalizeTarget(name.replace(/\.md$/, "")) === target);
 }
 
@@ -876,21 +947,33 @@ function unsupportedPlan(kind: MutationKind, resolution: Exclude<Resolution, { s
 function updateGuidance(candidate: Candidate): string[] {
 	if (candidate.kind === "pi-package") {
 		return [
-			"Pi package update remains guidance-only unless an exact-source/exact-scope updater is available.",
-			candidate.piPackage?.pinned ? "This package source is pinned, so automatic update is intentionally blocked." : "The broad `pi update --extension <source>` CLI can match more than one configured entry; this extension will not rely on it for single-target mutation.",
+			"Pi package update is supported only for exact-one unpinned npm/git package entries.",
+			candidate.piPackage?.updateBlockedReason ? `Gate failed: ${candidate.piPackage.updateBlockedReason}` : "This package did not pass automatic update gates.",
+		];
+	}
+	if (candidate.kind === "bundle" || candidate.kind === "bundle-member") {
+		return [
+			"This target is owned by a discovered plugin bundle manifest.",
+			"Automatic update is guidance-only until the bundle declares updater/source metadata; run the bundle's installer/update command manually.",
 		];
 	}
 	if (candidate.kind === "external-skill") {
 		return [
 			"This target is an external `npx skills` resource.",
-			`Automatic npx updates are supported only for safe global lock entries via exact \`${SUPPORTED_NPX_SKILLS_CLI_PACKAGE}\` execution.`,
+			`Automatic npx updates are supported only for safe global lock entries via exact \`${PINNED_NPX_SKILLS_CLI_PACKAGE}\` execution.`,
 			...(candidate.npxSkill?.verificationIssues.map((issue) => `Gate failed: ${issue}`) ?? []),
 		];
 	}
-	return [`This target has no supported update adapter.`, `Supported update targets: \`${COMPOUND_PACKAGE}\`, Compound bundle members, and safe global npx skills.`];
+	return ["This target has no supported update adapter.", "Supported update targets: exact-one unpinned npm/git Pi packages and safe global npx skills."];
 }
 
 function removeGuidance(candidate: Candidate): string[] {
+	if (candidate.kind === "pi-package") {
+		return [
+			"Pi package remove is supported only when the settings target resolves to exactly one package identity.",
+			candidate.piPackage?.removeBlockedReason ? `Gate failed: ${candidate.piPackage.removeBlockedReason}` : "This package did not pass automatic remove gates.",
+		];
+	}
 	if (candidate.kind === "external-skill") {
 		return [
 			"이 target은 external `npx skills` resource입니다.",
@@ -899,7 +982,7 @@ function removeGuidance(candidate: Candidate): string[] {
 		];
 	}
 	if (candidate.kind === "bundle" || candidate.kind === "bundle-member") {
-		return ["Compound bundle/member removal은 v1에서 guidance-only입니다.", "Compound full removal은 별도 purge/restore 설계가 필요합니다."];
+		return ["Plugin bundle/member removal은 v1에서 guidance-only입니다.", "Plugin bundle full removal은 별도 purge/restore 설계가 필요합니다."];
 	}
 	return ["This target has no supported remove adapter in v1."];
 }
@@ -930,10 +1013,32 @@ function formatCandidate(candidate: Candidate): string[] {
 
 function packageIdentityFromSource(source: string, settingsPath: string): string {
 	if (source.startsWith("npm:")) return `npm:${stripNpmVersion(source.slice("npm:".length))}`;
-	const withoutPrefix = source.replace(/^git:/, "");
-	const gitMatch = withoutPrefix.match(/(?:https?:\/\/|ssh:\/\/|git:\/\/)?(?:git@)?([^/:]+)[:/]([^/@:]+\/[^/@]+?)(?:\.git)?(?:@[^/]+)?$/);
-	if (gitMatch) return `git:${gitMatch[1].toLowerCase()}/${gitMatch[2].replace(/\.git$/, "")}`;
+	const withoutPrefix = stripGitRef(source.replace(/^git:/, ""));
+	const gitMatch = withoutPrefix.match(/(?:https?:\/\/|ssh:\/\/|git:\/\/)?(?:git@)?([^/:@]+)[:/]([^@]+?)(?:\.git)?$/);
+	if (gitMatch && gitMatch[2].includes("/")) return `git:${gitMatch[1].toLowerCase()}/${gitMatch[2].replace(/\.git$/, "")}`;
 	return `local:${isAbsolute(source) ? resolve(source) : resolve(dirname(settingsPath), source)}`;
+}
+
+function packageSourceType(source: string): PiPackage["sourceType"] {
+	if (source.startsWith("npm:")) return "npm";
+	if (source.startsWith("git:") || /^(?:https?|ssh|git):\/\//.test(source) || source.startsWith("git@")) return "git";
+	if (isAbsolute(source) || source.startsWith("./") || source.startsWith("../")) return "local";
+	return "unknown";
+}
+
+function isSafePackageUpdateSource(source: string, sourceType: PiPackage["sourceType"]): boolean {
+	if (/\s|[\u0000-\u001f\u007f]/.test(source)) return false;
+	if (source.startsWith("-")) return false;
+	if (sourceType === "npm") {
+		const spec = source.slice("npm:".length);
+		return /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/i.test(spec);
+	}
+	if (sourceType === "git") {
+		const withoutPrefix = source.replace(/^git:/, "");
+		if (withoutPrefix.startsWith("-") || withoutPrefix.startsWith(".") || withoutPrefix.startsWith("/")) return false;
+		return /^(?:https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?|git@github\.com:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?)$/.test(withoutPrefix);
+	}
+	return false;
 }
 
 function isPinnedPackageSource(source: string): boolean {
@@ -941,8 +1046,39 @@ function isPinnedPackageSource(source: string): boolean {
 		const spec = source.slice("npm:".length);
 		return spec.startsWith("@") ? spec.indexOf("@", 1) !== -1 : spec.includes("@");
 	}
+	if (packageSourceType(source) !== "git") return false;
 	const withoutPrefix = source.replace(/^git:/, "");
-	return /(?:\.git|[^/])@[^/]+$/.test(withoutPrefix) && !withoutPrefix.startsWith("git@");
+	if (withoutPrefix.includes("#")) return true;
+	if (withoutPrefix.startsWith("git@")) {
+		const repoPart = withoutPrefix.slice(withoutPrefix.indexOf(":") + 1);
+		return repoPart.includes("@");
+	}
+	const protocolMatch = withoutPrefix.match(/^[a-z]+:\/\/(.+)$/i);
+	if (protocolMatch) {
+		const firstPathSlash = protocolMatch[1].indexOf("/");
+		return firstPathSlash !== -1 && protocolMatch[1].slice(firstPathSlash + 1).includes("@");
+	}
+	return withoutPrefix.includes("@");
+}
+
+function stripGitRef(source: string): string {
+	const withoutHash = source.split("#")[0];
+	if (withoutHash.startsWith("git@")) {
+		const colon = withoutHash.indexOf(":");
+		if (colon === -1) return withoutHash;
+		const prefix = withoutHash.slice(0, colon + 1);
+		const repo = withoutHash.slice(colon + 1);
+		return `${prefix}${repo.split("@")[0]}`;
+	}
+	const protocolMatch = withoutHash.match(/^([a-z]+:\/\/)(.+)$/i);
+	if (protocolMatch) {
+		const firstPathSlash = protocolMatch[2].indexOf("/");
+		if (firstPathSlash === -1) return withoutHash;
+		const authority = protocolMatch[2].slice(0, firstPathSlash + 1);
+		const path = protocolMatch[2].slice(firstPathSlash + 1).split("@")[0];
+		return `${protocolMatch[1]}${authority}${path}`;
+	}
+	return withoutHash.split("@")[0];
 }
 
 function packageNameFromSource(source: string): string {
@@ -998,7 +1134,15 @@ function acquireLock(path: string): () => void {
 					return acquireLock(path);
 				}
 			} catch {
-				// Fall through to useful error.
+				try {
+					const stat = lstatSync(path);
+					if (!stat.isSymbolicLink() && Date.now() - stat.mtimeMs > MALFORMED_LOCK_STALE_MS) {
+						unlinkSync(path);
+						return acquireLock(path);
+					}
+				} catch {
+					// Fall through to useful error.
+				}
 			}
 			throw new Error("Another skill lifecycle mutation appears to be running. Try again after it completes.");
 		}
