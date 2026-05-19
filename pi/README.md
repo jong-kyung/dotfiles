@@ -87,11 +87,7 @@ pi update --extensions
 
 ## MCP adapter
 
-Install `pi-mcp-adapter` to use MCP servers from pi without loading every MCP tool definition into the context window.
-
-```bash
-pi install npm:pi-mcp-adapter
-```
+`pi-mcp-adapter` lets pi use MCP servers without loading every MCP tool definition into the context window. It is installed by the required package setup above.
 
 Restart pi after installation. The adapter reads standard MCP config files such as `.mcp.json` and `~/.config/mcp/mcp.json`; run `/mcp setup` inside pi to inspect or import host-specific MCP configs.
 
@@ -172,12 +168,50 @@ Compound Engineering uses the pi subagents and ask-user tools, so `pi-subagents`
 
 The current local `~/.pi/agent/skills/` includes:
 
-- `acli-jira` — Jira Cloud workflow guidance for Atlassian's `acli`.
-- Compound Engineering skills from `~/.pi/agent/compound-engineering/install-manifest.json`: `ce-agent-native-architecture`, `ce-agent-native-audit`, `ce-brainstorm`, `ce-clean-gone-branches`, `ce-code-review`, `ce-commit`, `ce-commit-push-pr`, `ce-compound`, `ce-compound-refresh`, `ce-debug`, `ce-demo-reel`, `ce-dhh-rails-style`, `ce-doc-review`, `ce-frontend-design`, `ce-gemini-imagegen`, `ce-ideate`, `ce-optimize`, `ce-plan`, `ce-polish-beta`, `ce-product-pulse`, `ce-proof`, `ce-release-notes`, `ce-report-bug`, `ce-resolve-pr-feedback`, `ce-riffrec-feedback-analysis`, `ce-sessions`, `ce-setup`, `ce-simplify-code`, `ce-slack-research`, `ce-strategy`, `ce-test-browser`, `ce-test-xcode`, `ce-work`, `ce-work-beta`, `ce-worktree`, and `lfg`.
-- Figma workflow skills: `figma-code-connect`, `figma-create-design-system-rules`, `figma-create-new-file`, `figma-generate-design`, `figma-generate-diagram`, `figma-generate-library`, `figma-implement-design`, `figma-use`, `figma-use-figjam`, and `generate-project-plan`.
-- `skill-review` — structured review for skill files.
+- Compound Engineering bundle skills (`ce-*`, `lfg`) from `~/.pi/agent/compound-engineering/install-manifest.json`.
+- Figma workflow skills installed from `figma/mcp-server-guide` (see below).
+- Loose local skills with no package-manager lock metadata: `acli-jira` and `skill-review`. Preserve them by copying their folders from an existing machine, or omit them on machines that do not need them.
 
 Installed Pi packages also provide runtime skills: `ask-user` from `pi-ask-user` and `pi-subagents` from `pi-subagents`.
+
+## Figma MCP skills
+
+Install or refresh the local Figma workflow skills from Figma's official MCP guide repository:
+
+```bash
+tmp=$(mktemp -d)
+git clone --depth 1 https://github.com/figma/mcp-server-guide "$tmp"
+mkdir -p ~/.pi/agent/skills
+
+for path in \
+  skills/figma-code-connect \
+  skills/figma-create-new-file \
+  skills/figma-generate-design \
+  skills/figma-generate-diagram \
+  skills/figma-generate-library \
+  skills/figma-use \
+  skills/figma-use-figjam \
+  workflow-skills/generate-project-plan
+do
+  rsync -a --delete "$tmp/$path/" "$HOME/.pi/agent/skills/${path##*/}/"
+done
+
+make_figma_skill() {
+  name="$1" source="$2" description="$3" target="$HOME/.pi/agent/skills/$name"
+  mkdir -p "$target"
+  printf -- '---\nname: %s\ndescription: %s\ndisable-model-invocation: false\n---\n' "$name" "$description" > "$target/SKILL.md"
+  cat "$tmp/figma-power/steering/$source.md" >> "$target/SKILL.md"
+}
+
+make_figma_skill figma-implement-design implement-design \
+  "Translates Figma designs into production-ready application code with 1:1 visual fidelity."
+make_figma_skill figma-create-design-system-rules create-design-system-rules \
+  "Generates custom design system rules for Figma-to-code workflows."
+
+rm -rf "$tmp"
+```
+
+`figma-implement-design` and `figma-create-design-system-rules` are Pi wrappers around `figma-power/steering/*.md`. Restart Pi after installing or refreshing these skills.
 
 ## Agent Browser
 
@@ -210,8 +244,7 @@ On this machine, pi also auto-loads skills from `~/.agents/skills/`. Run these c
 # Skill discovery helper
 npx skills add https://github.com/vercel-labs/skills --skill find-skills --agent pi -g -y
 
-# Browser automation skill stub
-npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser --agent pi -g -y
+# Browser automation is documented in the Agent Browser section above.
 
 # GitHub and Atlassian workflow skills
 npx skills add https://github.com/hamsurang/kit --skill gh-cli --agent pi -g -y
@@ -256,11 +289,14 @@ rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/
 # 3. Compound Engineering
 bunx @every-env/compound-plugin install compound-engineering --to pi
 
-# 4. Browser automation
+# 4. Figma MCP skills
+# Run the install/refresh snippet in the "Figma MCP skills" section above.
+
+# 5. Browser automation
 brew install agent-browser
 npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser --agent pi -g -y
 
-# 5. Other global skills
+# 6. Other global skills
 npx skills add https://github.com/vercel-labs/skills --skill find-skills --agent pi -g -y
 npx skills add https://github.com/hamsurang/kit --skill gh-cli --agent pi -g -y
 npx skills add https://github.com/jeffallan/claude-skills --skill atlassian-mcp --agent pi -g -y
@@ -292,12 +328,12 @@ For a full setup handoff:
 ```text
 Configure the pi environment using the quick setup section in pi/README.md.
 Check whether each item is already installed or in sync first, and install or sync only the missing/drifted items.
-After setup, verify with pi list, rsync -ain --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/, npx skills list -g --agent pi, and agent-browser --version.
+After setup, verify with pi list, rsync -ain --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/, find ~/.pi/agent/skills -maxdepth 2 -name SKILL.md | grep figma, npx skills list -g --agent pi, and agent-browser --version.
 ```
 
 For updates only:
 
 ```text
-Use pi/README.md to update the currently installed pi packages, global extensions, global skills, and agent-browser.
+Use pi/README.md to update the currently installed pi packages, global extensions, Figma MCP skills, global skills, and agent-browser.
 Summarize versions before and after the update, plus extension sync status. Do not modify pinned packages or items that require manual review; report them instead.
 ```
