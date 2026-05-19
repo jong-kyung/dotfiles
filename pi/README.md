@@ -29,7 +29,6 @@ Install or refresh these extensions globally with:
 
 ```bash
 mkdir -p ~/.pi/agent/extensions
-rm -rf ~/.pi/agent/extensions/skill-lifecycle-control-plane  # old name before skill-manager
 rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
 ```
 
@@ -116,6 +115,16 @@ The current local `~/.pi/agent/mcp.json` includes the Figma desktop MCP server a
 
 This repo includes a project-local Pi extension for inspecting and safely managing Pi skill/package lifecycle targets.
 
+Use these read-only commands when the local skill inventory below needs refreshing:
+
+```bash
+pi list
+npx skills list -g --agent pi
+find ~/.pi/agent/skills ~/.agents/skills -maxdepth 2 -name SKILL.md | sort
+```
+
+Use `/skill-status <target>` to inspect ownership before updating a specific skill, and `/skill-update <target>` only for targets reported as safely updateable.
+
 Commands:
 
 ```text
@@ -161,13 +170,14 @@ Compound Engineering uses the pi subagents and ask-user tools, so `pi-subagents`
 
 ## Additional Pi-local skills
 
-The current local `~/.pi/agent/skills/` also includes these non-Compound skills:
+The current local `~/.pi/agent/skills/` includes:
 
 - `acli-jira` — Jira Cloud workflow guidance for Atlassian's `acli`.
+- Compound Engineering skills from `~/.pi/agent/compound-engineering/install-manifest.json`: `ce-agent-native-architecture`, `ce-agent-native-audit`, `ce-brainstorm`, `ce-clean-gone-branches`, `ce-code-review`, `ce-commit`, `ce-commit-push-pr`, `ce-compound`, `ce-compound-refresh`, `ce-debug`, `ce-demo-reel`, `ce-dhh-rails-style`, `ce-doc-review`, `ce-frontend-design`, `ce-gemini-imagegen`, `ce-ideate`, `ce-optimize`, `ce-plan`, `ce-polish-beta`, `ce-product-pulse`, `ce-proof`, `ce-release-notes`, `ce-report-bug`, `ce-resolve-pr-feedback`, `ce-riffrec-feedback-analysis`, `ce-sessions`, `ce-setup`, `ce-simplify-code`, `ce-slack-research`, `ce-strategy`, `ce-test-browser`, `ce-test-xcode`, `ce-work`, `ce-work-beta`, `ce-worktree`, and `lfg`.
 - Figma workflow skills: `figma-code-connect`, `figma-create-design-system-rules`, `figma-create-new-file`, `figma-generate-design`, `figma-generate-diagram`, `figma-generate-library`, `figma-implement-design`, `figma-use`, `figma-use-figjam`, and `generate-project-plan`.
 - `skill-review` — structured review for skill files.
 
-These are tracked as local Pi skill resources, not as npm packages in `settings.json`.
+Installed Pi packages also provide runtime skills: `ask-user` from `pi-ask-user` and `pi-subagents` from `pi-subagents`.
 
 ## Agent Browser
 
@@ -200,8 +210,12 @@ On this machine, pi also auto-loads skills from `~/.agents/skills/`. Run these c
 # Skill discovery helper
 npx skills add https://github.com/vercel-labs/skills --skill find-skills --agent pi -g -y
 
-# GitHub CLI workflow skill
+# Browser automation skill stub
+npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser --agent pi -g -y
+
+# GitHub and Atlassian workflow skills
 npx skills add https://github.com/hamsurang/kit --skill gh-cli --agent pi -g -y
+npx skills add https://github.com/jeffallan/claude-skills --skill atlassian-mcp --agent pi -g -y
 
 # React / UI engineering skills
 npx skills add https://github.com/vercel-labs/agent-skills \
@@ -212,7 +226,7 @@ npx skills add https://github.com/vercel-labs/agent-skills \
 npx skills add https://github.com/mattpocock/skills --skill grill-with-docs --agent pi -g -y
 
 # React quality checker
-npx skills add https://github.com/aidenybai/react-doctor --skill react-doctor --agent pi -g -y
+npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent pi -g -y
 ```
 
 Verify:
@@ -237,7 +251,6 @@ pi install npm:pi-mcp-adapter
 
 # 2. Global extensions tracked by this repo
 mkdir -p ~/.pi/agent/extensions
-rm -rf ~/.pi/agent/extensions/skill-lifecycle-control-plane
 rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
 
 # 3. Compound Engineering
@@ -250,11 +263,12 @@ npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browse
 # 5. Other global skills
 npx skills add https://github.com/vercel-labs/skills --skill find-skills --agent pi -g -y
 npx skills add https://github.com/hamsurang/kit --skill gh-cli --agent pi -g -y
+npx skills add https://github.com/jeffallan/claude-skills --skill atlassian-mcp --agent pi -g -y
 npx skills add https://github.com/vercel-labs/agent-skills \
   --skill vercel-react-best-practices vercel-composition-patterns web-design-guidelines \
   --agent pi -g -y
 npx skills add https://github.com/mattpocock/skills --skill grill-with-docs --agent pi -g -y
-npx skills add https://github.com/aidenybai/react-doctor --skill react-doctor --agent pi -g -y
+npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent pi -g -y
 ```
 
 ## Security notes
