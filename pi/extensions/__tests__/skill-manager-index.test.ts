@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addUserSkillExclude, parseRemoveArgs } from "../skill-manager/index";
+import { addUserSkillExclude, freshnessCacheKey, parseRemoveArgs } from "../skill-manager/index";
 
 function tempSettingsPath(): string {
 	const root = mkdtempSync(join(tmpdir(), "skill-manager-index-test-"));
@@ -54,5 +54,16 @@ describe("remove argument parsing", () => {
 	test("accepts --global in either position", () => {
 		expect(parseRemoveArgs("agent-browser --global")).toEqual({ target: "agent-browser", npxRemoveMode: "global" });
 		expect(parseRemoveArgs("--global agent-browser")).toEqual({ target: "agent-browser", npxRemoveMode: "global" });
+	});
+});
+
+describe("freshness cache keys", () => {
+	test("include local folder hash evidence for npx skill checks", () => {
+		const first = freshnessCacheKey({ repo: "vercel-labs/agent-browser", skillPath: "skills/agent-browser/SKILL.md", localHash: "old" });
+		const second = freshnessCacheKey({ repo: "vercel-labs/agent-browser", skillPath: "skills/agent-browser/SKILL.md", localHash: "new" });
+
+		expect(first).not.toBe(second);
+		expect(first).toContain("@old");
+		expect(second).toContain("@new");
 	});
 });

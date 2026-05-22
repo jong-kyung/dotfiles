@@ -10,23 +10,62 @@ import {
 	formatPlan,
 	formatReceipt,
 	formatStatus,
+	freshnessEvidenceForCandidate,
+	freshnessFromFolderHash,
+	freshnessFromRemote,
+	highestStableSemver,
 	makeReceipt,
 	redactDisplay,
 	readRecentReceipt,
 	resolveTarget,
 	summarizeExecResult,
 	PINNED_NPX_SKILLS_CLI_VERSION,
+	unknownFreshness,
+	checkUnavailableFreshness,
 	withLifecycleLock,
 	type ActionPlan,
 	type ApplyResult,
+	type Candidate,
+	type FreshnessResult,
 	type Inventory,
 	type NpxRemoveMode,
 } from "./lifecycle";
 
 const RECEIPT_TYPE = "skill-lifecycle-receipt";
 const LAST_SHOWN_KEY = "__pi_skill_lifecycle_last_shown_receipt__";
-function sendLifecycleMessage(pi: ExtensionAPI, ctx: { ui?: { notify(message: string, type?: "info" | "warning" | "error"): void } }, text: string, type: "info" | "warning" | "error" = "info"): void {
-	pi.sendMessage({ customType: "skill-lifecycle", content: text, display: true });
+
+const STATUS_MESSAGE_TYPE = "skill-lifecycle-status";
+
+async function registerStatusRenderer(pi: ExtensionAPI): Promise<void> {
+	try {
+		const [{ getMarkdownTheme }, { Box, Markdown, Spacer, Text }] = await Promise.all([
+			import("@earendil-works/pi-coding-agent"),
+			import("@earendil-works/pi-tui"),
+		]);
+		pi.registerMessageRenderer(STATUS_MESSAGE_TYPE, (message: { content: unknown; customType?: string }, _options: unknown, theme: { bg(key: string, value: string): string; fg(key: string, value: string): string; bold(value: string): string }) => {
+			const text = extractMessageText(message.content) || "(no content)";
+			const box = new Box(1, 1, (value: string) => theme.bg("customMessageBg", value));
+			box.addChild(new Text(theme.fg("customMessageLabel", theme.bold("[skill-status]")), 0, 0));
+			box.addChild(new Spacer(1));
+			box.addChild(new Markdown(text, 0, 0, getMarkdownTheme(), { color: (value: string) => theme.fg("customMessageText", value) }));
+			return box;
+		});
+	} catch {
+		// Renderer support is best-effort; raw text remains the source of truth.
+	}
+}
+
+function extractMessageText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	return content.flatMap((part) => isTextPart(part) ? [part.text] : []).join("\n");
+}
+
+function isTextPart(value: unknown): value is { type: "text"; text: string } {
+	return typeof value === "object" && value !== null && (value as { type?: unknown }).type === "text" && typeof (value as { text?: unknown }).text === "string";
+}
+function sendLifecycleMessage(pi: ExtensionAPI, ctx: { ui?: { notify(message: string, type?: "info" | "warning" | "error"): void } }, text: string, type: "info" | "warning" | "error" = "info", customType = "skill-lifecycle"): void {
+	pi.sendMessage({ customType, content: text, display: true });
 	const title = text.split("\n").find((line) => line.trim())?.replace(/^#+\s*/, "").slice(0, 120) ?? "Skill lifecycle";
 	ctx.ui?.notify(title, type);
 }
@@ -340,6 +379,146 @@ function writeSettingsAtomically(settingsPath: string, content: string): void {
 	}
 }
 
+const GITHUB_API_VERSION = "2022-11-28";
+const FRESHNESS_TIMEOUT_MS = 1_500;
+const FRESHNESS_CACHE_TTL_MS = 5 * 60 * 1000;
+const FRESHNESS_ERROR_TTL_MS = 60 * 1000;
+const freshnessCache = new Map<string, { expiresAt: number; value: FreshnessResult }>();
+const inflightFreshness = new Map<string, Promise<FreshnessResult>>();
+
+async function determineFreshness(candidate: Candidate, signal?: AbortSignal): Promise<FreshnessResult> {
+	const evidence = freshnessEvidenceForCandidate(candidate);
+	if (!evidence.repo || (!evidence.localVersion && !evidence.localHash)) return unknownFreshness(evidence.reason);
+	if (isPiOffline()) return checkUnavailableFreshness("PI_OFFLINE is enabled");
+
+	const key = freshnessCacheKey(evidence);
+	const cached = freshnessCache.get(key);
+	if (cached && cached.expiresAt > Date.now()) return cached.value;
+	let promise = inflightFreshness.get(key);
+	if (!promise) {
+		promise = fetchFreshness(evidence)
+			.then((value) => {
+				freshnessCache.set(key, { expiresAt: Date.now() + (value.status === "check-unavailable" ? FRESHNESS_ERROR_TTL_MS : FRESHNESS_CACHE_TTL_MS), value });
+				return value;
+			})
+			.finally(() => inflightFreshness.delete(key));
+		inflightFreshness.set(key, promise);
+	}
+	return signal ? freshnessForCaller(promise, signal) : promise;
+}
+
+export function freshnessCacheKey(evidence: ReturnType<typeof freshnessEvidenceForCandidate>): string {
+	return `${evidence.repo}@${evidence.ref ?? "HEAD"}@${evidence.skillPath ?? evidence.localVersion ?? "unknown"}@${evidence.localHash ?? evidence.localVersion ?? "unknown"}`;
+}
+
+function freshnessForCaller(promise: Promise<FreshnessResult>, signal: AbortSignal): Promise<FreshnessResult> {
+	if (signal.aborted) return Promise.resolve(checkUnavailableFreshness("request cancelled"));
+	return new Promise((resolve) => {
+		const abort = () => resolve(checkUnavailableFreshness("request cancelled"));
+		signal.addEventListener("abort", abort, { once: true });
+		promise.then(resolve, () => resolve(checkUnavailableFreshness("GitHub check failed"))).finally(() => signal.removeEventListener("abort", abort));
+	});
+}
+
+async function fetchFreshness(evidence: ReturnType<typeof freshnessEvidenceForCandidate>): Promise<FreshnessResult> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), FRESHNESS_TIMEOUT_MS);
+	try {
+		if (evidence.repo && evidence.skillPath && evidence.localHash) {
+			const latestHash = await fetchLatestSkillFolderHash(evidence.repo, evidence.skillPath, evidence.ref, controller.signal);
+			return freshnessFromFolderHash(evidence.localHash, latestHash);
+		}
+		if (evidence.repo && evidence.localVersion) {
+			const remoteVersion = await fetchLatestGitHubStableVersion(evidence.repo, controller.signal);
+			return freshnessFromRemote(evidence, remoteVersion);
+		}
+		return unknownFreshness(evidence.reason);
+	} catch (error) {
+		return checkUnavailableFreshness(error instanceof Error && error.name === "AbortError" ? "GitHub check timed out" : "GitHub check failed");
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+interface GitHubTreeEntry {
+	path: string;
+	type: "blob" | "tree";
+	sha: string;
+}
+
+interface GitHubRepoTree {
+	sha: string;
+	tree: GitHubTreeEntry[];
+}
+
+async function fetchLatestSkillFolderHash(repo: string, skillPath: string, ref: string | undefined, signal: AbortSignal): Promise<string | undefined> {
+	const tree = await fetchRepoTree(repo, ref, signal);
+	if (!tree) return undefined;
+	return getSkillFolderHashFromTree(tree, skillPath);
+}
+
+async function fetchRepoTree(repo: string, ref: string | undefined, signal: AbortSignal): Promise<GitHubRepoTree | undefined> {
+	for (const branch of ref ? [ref] : ["HEAD", "main", "master"]) {
+		try {
+			const tree = await fetchGitHubJson(`https://api.github.com/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`, signal);
+			if (isObject(tree) && typeof tree.sha === "string" && Array.isArray(tree.tree)) {
+				return { sha: tree.sha, tree: tree.tree.filter(isGitHubTreeEntry) };
+			}
+		} catch {
+			// Try the next conventional branch/ref.
+		}
+	}
+	return undefined;
+}
+
+function getSkillFolderHashFromTree(tree: GitHubRepoTree, skillPath: string): string | undefined {
+	let folderPath = skillPath.replace(/\\/g, "/");
+	if (folderPath.toLowerCase().endsWith("/skill.md")) folderPath = folderPath.slice(0, -9);
+	else if (folderPath.toLowerCase().endsWith("skill.md")) folderPath = folderPath.slice(0, -8);
+	if (folderPath.endsWith("/")) folderPath = folderPath.slice(0, -1);
+	if (!folderPath) return tree.sha;
+	return tree.tree.find((entry) => entry.type === "tree" && entry.path === folderPath)?.sha;
+}
+
+function isGitHubTreeEntry(value: unknown): value is GitHubTreeEntry {
+	return isObject(value) && typeof value.path === "string" && (value.type === "blob" || value.type === "tree") && typeof value.sha === "string";
+}
+
+async function fetchLatestGitHubStableVersion(repo: string, signal: AbortSignal): Promise<string | undefined> {
+	const releases = await fetchGitHubJson(`https://api.github.com/repos/${repo}/releases?per_page=30`, signal);
+	if (Array.isArray(releases)) {
+		const releaseVersions = releases.flatMap((release) => {
+			if (!isObject(release) || release.draft === true || release.prerelease === true) return [];
+			return [release.tag_name, release.name].filter((value): value is string => typeof value === "string");
+		});
+		const latestRelease = highestStableSemver(releaseVersions);
+		if (latestRelease) return latestRelease;
+	}
+
+	const tags = await fetchGitHubJson(`https://api.github.com/repos/${repo}/tags?per_page=100`, signal);
+	if (!Array.isArray(tags)) return undefined;
+	return highestStableSemver(tags.flatMap((tag) => isObject(tag) && typeof tag.name === "string" ? [tag.name] : []));
+}
+
+async function fetchGitHubJson(url: string, signal: AbortSignal): Promise<unknown> {
+	const fetcher = globalThis.fetch;
+	if (!fetcher) throw new Error("fetch unavailable");
+	const response = await fetcher(url, {
+		signal,
+		headers: {
+			Accept: "application/vnd.github+json",
+			"X-GitHub-Api-Version": GITHUB_API_VERSION,
+			"User-Agent": "pi-skill-manager",
+		},
+	});
+	if (!response.ok) throw new Error(`GitHub check failed with ${response.status}`);
+	return response.json();
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function parseRemoveArgs(args: string): { target: string; npxRemoveMode: NpxRemoveMode } {
 	const tokens = args.trim().split(/\s+/).filter(Boolean);
 	const global = tokens.includes("--global");
@@ -349,7 +528,8 @@ export function parseRemoveArgs(args: string): { target: string; npxRemoveMode: 
 async function handleStatus(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string): Promise<void> {
 	const inventory = inventoryFor(pi, ctx);
 	const resolution = resolveTarget(args, inventory);
-	sendLifecycleMessage(pi, ctx, formatStatus(resolution, inventory), resolution.status === "resolved" ? "info" : "warning");
+	const freshness = resolution.status === "resolved" ? await determineFreshness(resolution.candidate, ctx.signal) : undefined;
+	sendLifecycleMessage(pi, ctx, formatStatus(resolution, inventory, freshness), resolution.status === "resolved" ? "info" : "warning", STATUS_MESSAGE_TYPE);
 }
 
 async function handleUpdate(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string): Promise<void> {
@@ -408,6 +588,8 @@ async function handleRemove(pi: ExtensionAPI, ctx: ExtensionCommandContext, args
 }
 
 export default function skillLifecycleControlPlane(pi: ExtensionAPI) {
+	void registerStatusRenderer(pi);
+
 	pi.on("session_start", (_event, ctx) => {
 		const receipt = readRecentReceipt(ctx.sessionManager.getBranch());
 		if (!receipt) return;

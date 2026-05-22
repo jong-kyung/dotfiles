@@ -17,7 +17,8 @@
   - Pi package settings
   - safe local `npx skills` lock metadata
   - loaded runtime commands and loose skill folders
-- Reports target ownership, source, resources, and supported actions without mutating anything.
+- Reports target ownership, source, resources, remote update freshness, and an action availability table without running mutation commands.
+- Shows `Update Available` only when a bounded GitHub release/tag check can compare a newer remote semver to a local semver; otherwise freshness stays neutral (`Unknown` or `Check unavailable`).
 - Builds explicit update/remove plans before running any supported mutation.
 - Requires confirmation before external package-manager commands.
 - Revalidates target ownership immediately before mutation.

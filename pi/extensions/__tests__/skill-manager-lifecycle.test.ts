@@ -5,11 +5,17 @@ import { join } from "node:path";
 import {
 	buildRemovePlan,
 	buildUpdatePlan,
+	checkUnavailableFreshness,
 	collectInventory,
+	compareStableSemver,
 	defaultPaths,
 	filterCompletions,
 	formatPlan,
 	formatStatus,
+	freshnessEvidenceForCandidate,
+	freshnessFromFolderHash,
+	freshnessFromRemote,
+	highestStableSemver,
 	isSafeRemovablePath,
 	makeReceipt,
 	resolveTarget,
@@ -212,6 +218,23 @@ describe("target resolution", () => {
 		expect(completions).toContain("lfg");
 	});
 
+	test("no-target status shows concise top-level owners instead of inferred bundle members", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("", inventory);
+		const status = formatStatus(resolution, inventory);
+
+		expect(status).toContain("Skill lifecycle status: target required");
+		expect(status).toContain("Usage: `/skill-status <target>`");
+		expect(status).toContain("Top-level targets:");
+		expect(status).toContain("`base-plugin` — plugin-bundle");
+		expect(status).toContain("`pi-subagents` — pi-package");
+		expect(status).toContain("`agent-browser` — npx-skills");
+		expect(status).not.toContain("`ce-plan`");
+		expect(status).not.toContain("(inferred)");
+	});
+
 	test("keeps unverified npx skills guidance-only", () => {
 		const paths = fixturePaths();
 		seedInventory(paths);
@@ -408,6 +431,79 @@ describe("target resolution", () => {
 		expect(resolution.status).toBe("ambiguous");
 		if (resolution.status !== "ambiguous") return;
 		expect(resolution.candidates.map((candidate) => candidate.manager).sort()).toEqual(["npx-skills", "runtime-command"]);
+	});
+});
+
+describe("status freshness formatting", () => {
+	test("does not use update action support as remote update availability", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("agent-browser", inventory);
+
+		expect(resolution.status).toBe("resolved");
+		if (resolution.status !== "resolved") return;
+		expect(resolution.candidate.update).toBe("supported");
+		const status = formatStatus(resolution, inventory);
+
+		expect(status).toContain("Remote update: **Unknown**");
+		expect(status).toContain("| Update | Supported |");
+		expect(status).not.toContain("Update Available");
+		expect(status).not.toContain("🟡");
+		expect(status).not.toContain("✅");
+		expect(status).not.toContain("Notes:");
+	});
+
+	test("renders update available only from freshness result", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("pi-subagents", inventory);
+		const status = formatStatus(resolution, inventory, { status: "update-available", localVersion: "1.2.0", remoteVersion: "1.3.0" });
+
+		expect(status).toContain("Remote update: **Update Available** (1.2.0 → 1.3.0)");
+	});
+
+	test("formats check unavailable neutrally", () => {
+		const paths = fixturePaths();
+		seedInventory(paths);
+		const inventory = collectInventory(paths.cwd, [], paths);
+		const resolution = resolveTarget("pi-subagents", inventory);
+		const status = formatStatus(resolution, inventory, checkUnavailableFreshness("GitHub check timed out"));
+
+		expect(status).toContain("Remote update: **Check unavailable**");
+		expect(status).toContain("Reason: GitHub check timed out");
+		expect(status).not.toContain("Update Available");
+	});
+
+	test("extracts strict GitHub semver evidence and rejects hash-only installs", () => {
+		const gitPaths = fixturePaths();
+		seedInventory(gitPaths);
+		writeJson(gitPaths.userSettingsPath, { packages: ["git:https://github.com/example/pi-plugin.git#v1.2.3"] });
+		let inventory = collectInventory(gitPaths.cwd, [], gitPaths);
+		let resolution = resolveTarget("pi-plugin", inventory);
+		expect(resolution.status).toBe("resolved");
+		if (resolution.status !== "resolved") return;
+		expect(freshnessEvidenceForCandidate(resolution.candidate)).toEqual({ repo: "example/pi-plugin", localVersion: "1.2.3" });
+
+		const npxPaths = fixturePaths();
+		seedInventory(npxPaths);
+		inventory = collectInventory(npxPaths.cwd, [], npxPaths);
+		resolution = resolveTarget("agent-browser", inventory);
+		expect(resolution.status).toBe("resolved");
+		if (resolution.status !== "resolved") return;
+		expect(freshnessEvidenceForCandidate(resolution.candidate)).toEqual({ repo: "vercel-labs/agent-browser", skillPath: "skills/agent-browser/SKILL.md", localHash: "c1470a475a0472fceda2401ea6763708a91680a8" });
+	});
+
+	test("compares stable semver without coercing prereleases", () => {
+		expect(compareStableSemver("v1.10.0", "1.9.9")).toBe(1);
+		expect(compareStableSemver("1.2.3", "1.2.3")).toBe(0);
+		expect(compareStableSemver("1.2.3-beta.1", "1.2.2")).toBeUndefined();
+		expect(highestStableSemver(["latest", "v1.2.0", "1.10.0", "1.9.9-beta.1"])).toBe("1.10.0");
+		expect(freshnessFromRemote({ repo: "example/repo", localVersion: "1.2.0" }, "1.3.0").status).toBe("update-available");
+		expect(freshnessFromRemote({ repo: "example/repo", localVersion: "1.3.0" }, "1.3.0").status).toBe("up-to-date");
+		expect(freshnessFromFolderHash("abc", "def").status).toBe("update-available");
+		expect(freshnessFromFolderHash("abc", "abc").status).toBe("up-to-date");
 	});
 });
 

@@ -124,7 +124,7 @@ Use `/skill-status <target>` to inspect ownership before updating a specific ski
 Commands:
 
 ```text
-/skill-status <target>   # inspect owner/source/resources/actions without mutation
+/skill-status <target>   # inspect owner/source/resources/freshness/actions without mutation commands
 /skill-update <target>   # show an update plan, then apply only supported targets after confirmation
 /skill-remove <target> [--global]  # show a removal plan, then apply only supported targets after confirmation
 ```
@@ -143,7 +143,8 @@ Support matrix:
 
 Safety defaults:
 
-- Status and completions are local/read-only; they do not run `npx`, `bunx`, `pi update`, or `pi remove`.
+- Status and completions do not run `npx`, `bunx`, `pi update`, or `pi remove`.
+- `/skill-status` may perform a bounded GitHub release/tag freshness check for exactly resolved GitHub targets with a comparable local semver; failures and missing version evidence render as `Unknown` or `Check unavailable`.
 - Mutating commands require confirmation and use the same status resolver before applying anything.
 - Homebrew CLIs and unmanaged resources are not removed. Safe local `npx skills` targets default to Pi-visibility-only removal; whole-global removal remains guidance-only and should be done manually when intended.
 - Resource-changing commands write a short receipt and reload Pi so the current session reflects updated skills.

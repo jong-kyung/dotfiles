@@ -38,6 +38,7 @@ export interface NpxSkill {
 	sourceUrl?: string;
 	skillPath?: string;
 	skillFolderHash?: string;
+	ref?: string;
 	pluginName?: string;
 	lockVersion?: number;
 	verified: boolean;
@@ -133,6 +134,24 @@ export interface ApplyResult {
 	lines: string[];
 }
 
+export type FreshnessStatus = "update-available" | "up-to-date" | "unknown" | "check-unavailable";
+
+export interface FreshnessResult {
+	status: FreshnessStatus;
+	localVersion?: string;
+	remoteVersion?: string;
+	reason?: string;
+}
+
+export interface FreshnessEvidence {
+	repo?: string;
+	localVersion?: string;
+	ref?: string;
+	skillPath?: string;
+	localHash?: string;
+	reason?: string;
+}
+
 export interface LifecycleReceipt {
 	id: string;
 	ts: number;
@@ -220,7 +239,7 @@ export function collectInventory(cwd: string, commands: SlashCommandInfo[] = [],
 export function resolveTarget(input: string, inventory: Inventory): Resolution {
 	const target = normalizeTarget(input);
 	if (!target) {
-		return { status: "unsupported", target, suggestions: discoverableCandidates(inventory), reason: "No target provided." };
+		return { status: "unsupported", target, suggestions: topLevelCandidates(inventory), reason: "No target provided." };
 	}
 
 	const exact = exactCandidates(target, inventory);
@@ -368,25 +387,134 @@ export function buildRemovePlan(resolution: Resolution, options: { npxRemoveMode
 	};
 }
 
-export function formatStatus(resolution: Resolution, inventory: Inventory): string {
+export function unknownFreshness(reason = "no comparable local version"): FreshnessResult {
+	return { status: "unknown", reason };
+}
+
+export function checkUnavailableFreshness(reason = "remote update check unavailable"): FreshnessResult {
+	return { status: "check-unavailable", reason };
+}
+
+export function compareStableSemver(a: string, b: string): number | undefined {
+	const left = parseStableSemver(a);
+	const right = parseStableSemver(b);
+	if (!left || !right) return undefined;
+	for (const key of ["major", "minor", "patch"] as const) {
+		if (left[key] !== right[key]) return left[key] > right[key] ? 1 : -1;
+	}
+	return 0;
+}
+
+export function highestStableSemver(values: string[]): string | undefined {
+	let best: string | undefined;
+	for (const value of values) {
+		const parsed = parseStableSemver(value);
+		if (!parsed) continue;
+		const normalized = semverToString(parsed);
+		if (!best || compareStableSemver(normalized, best)! > 0) best = normalized;
+	}
+	return best;
+}
+
+export function freshnessEvidenceForCandidate(candidate: Candidate): FreshnessEvidence {
+	if (candidate.npxSkill?.source && GITHUB_SOURCE_RE.test(candidate.npxSkill.source)) {
+		return candidate.npxSkill.skillPath && candidate.npxSkill.skillFolderHash
+			? { repo: candidate.npxSkill.source, ref: candidate.npxSkill.ref, skillPath: candidate.npxSkill.skillPath, localHash: candidate.npxSkill.skillFolderHash }
+			: { repo: candidate.npxSkill.source, reason: "no skill folder hash" };
+	}
+	if (candidate.piPackage?.sourceType === "git") {
+		const parsed = parseGitHubPackageSource(candidate.piPackage.source);
+		if (!parsed?.repo) return { reason: "no supported GitHub source" };
+		const localVersion = parsed.ref ? normalizeStableSemver(parsed.ref) : undefined;
+		return localVersion
+			? { repo: parsed.repo, localVersion }
+			: { repo: parsed.repo, reason: "no comparable local version" };
+	}
+	return { reason: "no supported GitHub source" };
+}
+
+
+export function freshnessFromFolderHash(localHash: string, latestHash: string | undefined): FreshnessResult {
+	if (!latestHash) return checkUnavailableFreshness("latest skill folder hash could not be determined");
+	return localHash === latestHash
+		? { status: "up-to-date" }
+		: { status: "update-available", reason: "skill folder changed upstream" };
+}
+
+export function freshnessFromRemote(evidence: FreshnessEvidence, remoteVersion: string | undefined): FreshnessResult {
+	if (!evidence.repo || !evidence.localVersion) return unknownFreshness(evidence.reason);
+	if (!remoteVersion) return checkUnavailableFreshness("latest release/tag could not be determined");
+	const comparison = compareStableSemver(remoteVersion, evidence.localVersion);
+	if (comparison === undefined) return checkUnavailableFreshness("latest release/tag could not be determined");
+	return {
+		status: comparison > 0 ? "update-available" : "up-to-date",
+		localVersion: evidence.localVersion,
+		remoteVersion: normalizeStableSemver(remoteVersion),
+	};
+}
+
+function parseGitHubPackageSource(source: string): { repo?: string; ref?: string } | undefined {
+	let value = source.replace(/^git:/, "");
+	let ref: string | undefined;
+	const hashIndex = value.indexOf("#");
+	if (hashIndex !== -1) {
+		ref = value.slice(hashIndex + 1);
+		value = value.slice(0, hashIndex);
+	}
+	const httpsMatch = value.match(/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/);
+	if (httpsMatch) return { repo: `${httpsMatch[1]}/${httpsMatch[2]}`, ref };
+	const sshMatch = value.match(/^git@github\.com:([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/);
+	if (sshMatch) return { repo: `${sshMatch[1]}/${sshMatch[2]}`, ref };
+	return undefined;
+}
+
+function normalizeStableSemver(value: string | undefined): string | undefined {
+	const parsed = parseStableSemver(value);
+	return parsed ? semverToString(parsed) : undefined;
+}
+
+function parseStableSemver(value: string | undefined): { major: number; minor: number; patch: number } | undefined {
+	const match = value?.trim().match(/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z.-]+)?$/);
+	if (!match) return undefined;
+	return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
+}
+
+function semverToString(version: { major: number; minor: number; patch: number }): string {
+	return `${version.major}.${version.minor}.${version.patch}`;
+}
+
+export function formatStatus(resolution: Resolution, inventory: Inventory, freshness: FreshnessResult = unknownFreshness()): string {
 	if (resolution.status === "ambiguous") {
 		const lines = [
 			`## Skill lifecycle status: ambiguous target \`${resolution.target}\``,
 			"",
 			"Multiple candidates matched. No mutation will run until the target is disambiguated.",
 			"",
-			...resolution.candidates.flatMap((candidate) => formatCandidate(candidate).map((line) => `- ${line}`)),
+			...resolution.candidates.flatMap((candidate) => formatCandidateSummary(candidate).map((line) => `- ${line}`)),
 		];
 		if (inventory.warnings.length > 0) lines.push("", "Warnings:", ...inventory.warnings.map((warning) => `- ${warning}`));
 		return lines.join("\n");
 	}
 
 	if (resolution.status === "unsupported") {
-		const lines = [`## Skill lifecycle status: unsupported target`, "", resolution.reason];
+		const noTarget = !resolution.target;
+		const lines = [
+			`## Skill lifecycle status: ${noTarget ? "target required" : "unsupported target"}`,
+			"",
+			resolution.reason,
+		];
+		if (noTarget) {
+			lines.push(
+				"",
+				"Usage: `/skill-status <target>`",
+				"Start typing a skill, package, or plugin name to use completions. Bundle member names still work as explicit targets, but the overview below lists only top-level owners to avoid inferred noise.",
+			);
+		}
 		if (resolution.suggestions.length > 0) {
-			lines.push("", "Possible targets:");
-			for (const suggestion of resolution.suggestions.slice(0, 8)) {
-				lines.push(`- \`${suggestion.canonicalTarget}\` — ${suggestion.manager} (${suggestion.confidence})`);
+			lines.push("", noTarget ? "Top-level targets:" : "Possible targets:");
+			for (const suggestion of resolution.suggestions.slice(0, noTarget ? 12 : 8)) {
+				const detail = noTarget ? suggestion.manager : `${suggestion.manager} (${suggestion.confidence})`;
+				lines.push(`- \`${suggestion.canonicalTarget}\` — ${detail}`);
 			}
 		} else {
 			lines.push("", "Known top-level targets:", ...completionItems(inventory).slice(0, 12).map((item) => `- \`${item.value}\` — ${item.description ?? item.label}`));
@@ -396,7 +524,7 @@ export function formatStatus(resolution: Resolution, inventory: Inventory): stri
 	}
 
 	const candidate = resolution.candidate;
-	const lines = [`## Skill lifecycle status: \`${candidate.displayName}\``, "", ...formatCandidate(candidate)];
+	const lines = [`## Skill lifecycle status: \`${candidate.displayName}\``, "", ...formatCandidate(candidate, freshness)];
 	if (inventory.warnings.length > 0) {
 		lines.push("", "Warnings:", ...inventory.warnings.map((warning) => `- ${warning}`));
 	}
@@ -565,6 +693,7 @@ function readNpxSkillLock(path: string, agentsDir: string, warnings: string[]): 
 			const sourceUrl = typeof info.sourceUrl === "string" ? info.sourceUrl : undefined;
 			const lockedSkillPath = typeof info.skillPath === "string" ? info.skillPath : undefined;
 			const skillFolderHash = typeof info.skillFolderHash === "string" ? info.skillFolderHash : undefined;
+			const ref = typeof info.ref === "string" ? info.ref : undefined;
 			const verificationIssues = verifyNpxSkill(name, skillPath, agentsDir, lockVersion, { source, sourceType, sourceUrl, skillPath: lockedSkillPath, skillFolderHash }, lockIssues);
 			return [{
 				name,
@@ -574,6 +703,7 @@ function readNpxSkillLock(path: string, agentsDir: string, warnings: string[]): 
 				sourceUrl,
 				skillPath: lockedSkillPath,
 				skillFolderHash,
+				ref,
 				pluginName: typeof info.pluginName === "string" ? info.pluginName : undefined,
 				lockVersion,
 				verified: verificationIssues.length === 0,
@@ -761,6 +891,13 @@ function discoverableCandidates(inventory: Inventory): Candidate[] {
 		for (const skill of bundle.skills) candidates.push(pluginBundleMemberCandidate(bundle, skill));
 		for (const agent of bundle.agents) candidates.push(pluginBundleMemberCandidate(bundle, agent));
 	}
+	candidates.push(...topLevelCandidates(inventory).filter((candidate) => candidate.kind !== "bundle"));
+	return candidates;
+}
+
+function topLevelCandidates(inventory: Inventory): Candidate[] {
+	const candidates: Candidate[] = [];
+	for (const bundle of inventory.bundles) candidates.push(pluginBundleCandidate(bundle));
 	for (const pkg of inventory.piPackages) candidates.push(piPackageCandidate(pkg));
 	for (const skill of inventory.npxSkills) candidates.push(npxSkillCandidate(skill));
 	for (const loose of inventory.looseSkills) candidates.push(looseSkillCandidate(loose));
@@ -987,14 +1124,35 @@ function removeGuidance(candidate: Candidate): string[] {
 	return ["This target has no supported remove adapter."];
 }
 
-function formatCandidate(candidate: Candidate): string[] {
+function formatCandidateSummary(candidate: Candidate): string[] {
+	return [
+		`Identity: \`${redactDisplay(candidate.displayName)}\``,
+		`Canonical target: \`${redactDisplay(candidate.canonicalTarget)}\``,
+		`Manager: ${candidate.manager}`,
+		`Update action: ${formatActionAvailability(candidate.update)}`,
+		`Remove action: ${formatActionAvailability(candidate.remove)}`,
+	];
+}
+
+function formatCandidate(candidate: Candidate, freshness: FreshnessResult): string[] {
+	const reason = formatPrimaryReason(candidate, freshness);
 	const lines = [
 		`Identity: \`${redactDisplay(candidate.displayName)}\``,
 		`Canonical target: \`${redactDisplay(candidate.canonicalTarget)}\``,
 		`Manager: ${candidate.manager}`,
-		`Confidence: ${candidate.confidence}`,
-		`Actions: status=supported, update=${candidate.update}, remove=${candidate.remove}`,
+		`Remote update: ${formatFreshness(freshness)}`,
 	];
+	if (reason) lines.push(`Reason: ${redactDisplay(reason)}`);
+	lines.push(
+		"",
+		"Actions:",
+		"| Action | Availability |",
+		"| --- | --- |",
+		`| Status | ${formatActionAvailability("supported")} |`,
+		`| Update | ${formatActionAvailability(candidate.update)} |`,
+		`| Remove | ${formatActionAvailability(candidate.remove)} |`,
+		"",
+	);
 	if (candidate.source) lines.push(`Source: ${displaySafePath(candidate.source)}`);
 	if (candidate.scope) lines.push(`Scope: ${candidate.scope}`);
 	if (candidate.resources.length > 0) {
@@ -1004,11 +1162,27 @@ function formatCandidate(candidate: Candidate): string[] {
 			lines.push(`  - ${redactDisplay(resource.label)}${detail ? `: ${detail}` : ""}`);
 		}
 	}
-	if (candidate.notes.length > 0) {
-		lines.push("Notes:");
-		lines.push(...candidate.notes.map((note) => `  - ${redactDisplay(note)}`));
-	}
 	return lines;
+}
+
+function formatFreshness(freshness: FreshnessResult): string {
+	const versionDetail = freshness.localVersion && freshness.remoteVersion ? ` (${redactDisplay(freshness.localVersion)} → ${redactDisplay(freshness.remoteVersion)})` : "";
+	if (freshness.status === "update-available") return `**Update Available**${versionDetail}`;
+	if (freshness.status === "up-to-date") return `**Up to date**${versionDetail}`;
+	if (freshness.status === "check-unavailable") return "**Check unavailable**";
+	return "**Unknown**";
+}
+
+function formatPrimaryReason(candidate: Candidate, freshness: FreshnessResult): string | undefined {
+	if (candidate.update !== "supported") return candidate.piPackage?.updateBlockedReason ?? candidate.npxSkill?.verificationIssues[0] ?? candidate.notes[0];
+	if (candidate.remove !== "supported") return candidate.piPackage?.removeBlockedReason ?? candidate.npxSkill?.verificationIssues[0] ?? candidate.notes[0];
+	return freshness.reason;
+}
+
+function formatActionAvailability(support: ActionSupport): string {
+	if (support === "supported") return "Supported";
+	if (support === "guidance-only") return "Guidance only";
+	return "Unsupported";
 }
 
 function packageIdentityFromSource(source: string, settingsPath: string): string {
@@ -1084,9 +1258,10 @@ function stripGitRef(source: string): string {
 function packageNameFromSource(source: string): string {
 	const withoutPrefix = source.replace(/^npm:/, "").replace(/^git:/, "");
 	if (source.startsWith("npm:")) return stripNpmVersion(withoutPrefix);
-	const urlMatch = withoutPrefix.match(/([^/@:]+\/[^/@]+?)(?:\.git)?(?:@[^/]+)?$/);
-	if (urlMatch) return urlMatch[1].split("/").pop() ?? withoutPrefix;
-	return withoutPrefix.replace(/@[^@/]+$/, "");
+	const withoutRef = withoutPrefix.split("#")[0];
+	const urlMatch = withoutRef.match(/([^/@:]+\/[^/@]+?)(?:\.git)?(?:@[^/]+)?$/);
+	if (urlMatch) return urlMatch[1].split("/").pop() ?? withoutRef;
+	return withoutRef.replace(/@[^@/]+$/, "");
 }
 
 function stripNpmVersion(spec: string): string {
