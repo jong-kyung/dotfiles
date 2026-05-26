@@ -4,8 +4,10 @@ This directory manages the pi settings and project-local resources used by this 
 
 ## What this repo manages
 
-This repo tracks the Pi extensions used by the local global setup so they can be reviewed, copied, or symlinked into another Pi environment.
+This repo tracks the Pi extensions and project-owned skills used by the local global setup so they can be reviewed, copied, or symlinked into another Pi environment.
 
+- `pi/skills/acli-jira/`
+  - Adds the `acli-jira` skill for working with Jira Cloud from the command line using Atlassian's official `acli` tool.
 - `pi/extensions/btw.ts`
   - Adds `/btw`, a side-channel assistant popover for quick questions without disrupting the main thread.
 - `pi/extensions/context.ts`
@@ -38,9 +40,22 @@ Verify the global copy is in sync; no output means there is no drift:
 rsync -ain --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
 ```
 
-Restart pi after extension changes so loaded commands and tools refresh.
+Install or refresh tracked local skills globally with:
 
-For project-local usage, copy or symlink individual files into `.pi/extensions/` instead.
+```bash
+mkdir -p ~/.pi/agent/skills
+rsync -a --delete pi/skills/acli-jira/ ~/.pi/agent/skills/acli-jira/
+```
+
+Verify the tracked skill is in sync; no output means there is no drift:
+
+```bash
+rsync -ain --delete pi/skills/acli-jira/ ~/.pi/agent/skills/acli-jira/
+```
+
+Restart pi after extension or skill changes so loaded commands, tools, and skills refresh.
+
+For project-local usage, copy or symlink individual files into `.pi/extensions/` or `.pi/skills/` instead.
 
 ## Terminal-native notifications
 
@@ -171,7 +186,8 @@ The current local `~/.pi/agent/skills/` includes:
 
 - Compound Engineering bundle skills (`ce-*`, `lfg`) from `~/.pi/agent/compound-engineering/install-manifest.json`.
 - Figma workflow skills installed from `figma/mcp-server-guide` (see below).
-- Loose local skills with no package-manager lock metadata: `acli-jira` and `skill-review`. Preserve them by copying their folders from an existing machine, or omit them on machines that do not need them.
+- Tracked project-owned skills from this repo: `acli-jira` from `pi/skills/acli-jira/`.
+- Loose local skills with no package-manager lock metadata: `skill-review`. Preserve it by copying its folder from an existing machine, or omit it on machines that do not need it.
 
 Installed Pi packages also provide runtime skills: `ask-user` from `pi-ask-user` and `pi-subagents` from `pi-subagents`.
 
@@ -286,9 +302,10 @@ pi install npm:pi-subagents
 pi install npm:pi-ask-user
 pi install npm:pi-mcp-adapter
 
-# 2. Global extensions tracked by this repo
-mkdir -p ~/.pi/agent/extensions
+# 2. Global extensions and project-owned skills tracked by this repo
+mkdir -p ~/.pi/agent/extensions ~/.pi/agent/skills
 rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
+rsync -a --delete pi/skills/acli-jira/ ~/.pi/agent/skills/acli-jira/
 
 # 3. Compound Engineering
 bunx @every-env/compound-plugin install compound-engineering --to pi
