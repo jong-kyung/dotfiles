@@ -12,6 +12,8 @@ This repo tracks the Pi extensions and project-owned skills used by the local gl
   - Adds `/btw`, a side-channel assistant popover for quick questions without disrupting the main thread.
 - `pi/extensions/context.ts`
   - Adds `/context`, a TUI overview of loaded extensions, skills, context files, token usage, and session cost.
+- `pi/extensions/codegraph.ts`
+  - Adds the `codegraph` tool for semantic codebase search, context building, call graphs, impact analysis, and affected-test discovery. Requires the CodeGraph CLI on `PATH`.
 - `pi/extensions/control.ts`
   - Adds session-control flags, `/control-sessions`, and optional `send_to_session` / `list_sessions` tools when Pi is launched with `--session-control`.
 - `pi/extensions/files.ts`
@@ -99,6 +101,16 @@ Update:
 ```bash
 pi update --extensions
 ```
+
+## Required CLIs
+
+The `codegraph` extension shells out to the CodeGraph CLI. Install it separately before enabling the extension on a new machine, then verify it is on `PATH`:
+
+```bash
+codegraph --version
+```
+
+The current local machine uses CodeGraph CLI `0.9.4` at `~/.local/bin/codegraph`.
 
 ## MCP adapter
 
@@ -302,6 +314,9 @@ pi install npm:pi-subagents
 pi install npm:pi-ask-user
 pi install npm:pi-mcp-adapter
 
+# 1b. Required CLIs for tracked extensions
+codegraph --version  # install CodeGraph CLI first if this fails
+
 # 2. Global extensions and project-owned skills tracked by this repo
 mkdir -p ~/.pi/agent/extensions ~/.pi/agent/skills
 rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
@@ -350,7 +365,7 @@ For a full setup handoff:
 ```text
 Configure the pi environment using the quick setup section in pi/README.md.
 Check whether each item is already installed or in sync first, and install or sync only the missing/drifted items.
-After setup, verify with pi list, rsync -ain --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/, find ~/.pi/agent/skills -maxdepth 2 -name SKILL.md | grep figma, npx skills list -g --agent pi, and agent-browser --version.
+After setup, verify with pi list, codegraph --version, rsync -ain --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/, find ~/.pi/agent/skills -maxdepth 2 -name SKILL.md | grep figma, npx skills list -g --agent pi, and agent-browser --version.
 ```
 
 For updates only:
