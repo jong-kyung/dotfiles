@@ -1,6 +1,5 @@
 import {
 	buildSessionContext,
-	codingTools,
 	createAgentSession,
 	createExtensionRuntime,
 	getMarkdownTheme,
@@ -11,8 +10,8 @@ import {
 	type ExtensionCommandContext,
 	type ExtensionContext,
 	type ResourceLoader,
-} from "@mariozechner/pi-coding-agent";
-import { type AssistantMessage, type Message, type ThinkingLevel as AiThinkingLevel } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
+import { type AssistantMessage, type Message, type ThinkingLevel as AiThinkingLevel } from "@earendil-works/pi-ai";
 import {
 	Container,
 	Input,
@@ -23,7 +22,7 @@ import {
 	type KeybindingsManager,
 	type OverlayHandle,
 	type TUI,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 
 const BTW_ENTRY_TYPE = "btw-thread-entry";
 const BTW_RESET_TYPE = "btw-thread-reset";
@@ -241,7 +240,7 @@ class BtwOverlay extends Container implements Focusable {
 	}
 
 	handleInput(data: string): void {
-		if (this.keybindings.matches(data, "selectCancel")) {
+		if (this.keybindings.matches(data, "tui.select.cancel")) {
 			this.onDismissCallback();
 			return;
 		}
@@ -560,7 +559,7 @@ export default function (pi: ExtensionAPI) {
 			model: ctx.model,
 			modelRegistry: ctx.modelRegistry as AgentSession["modelRegistry"],
 			thinkingLevel: pi.getThinkingLevel() as SessionThinkingLevel,
-			tools: codingTools,
+			tools: ["read", "bash", "edit", "write"],
 			resourceLoader: createBtwResourceLoader(ctx),
 		});
 
@@ -945,10 +944,6 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		await restoreThread(ctx);
-	});
-
-	pi.on("session_switch", async (_event, ctx) => {
 		await restoreThread(ctx);
 	});
 
