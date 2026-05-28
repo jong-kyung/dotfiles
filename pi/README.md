@@ -287,8 +287,8 @@ npx skills add https://github.com/vercel-labs/agent-skills \
 # Current browser platform guidance for frontend work
 npx skills add https://github.com/GoogleChrome/modern-web-guidance --skill modern-web-guidance --agent pi -g -y
 
-# Planning/doc review helper
-npx skills add https://github.com/mattpocock/skills --skill grill-with-docs --agent pi -g -y
+# Planning/doc review helpers
+npx skills add https://github.com/mattpocock/skills --skill grill-me grill-with-docs --agent pi -g -y
 
 # React quality checker
 npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent pi -g -y
@@ -340,7 +340,7 @@ npx skills add https://github.com/vercel-labs/agent-skills \
   --skill vercel-react-best-practices vercel-composition-patterns web-design-guidelines \
   --agent pi -g -y
 npx skills add https://github.com/GoogleChrome/modern-web-guidance --skill modern-web-guidance --agent pi -g -y
-npx skills add https://github.com/mattpocock/skills --skill grill-with-docs --agent pi -g -y
+npx skills add https://github.com/mattpocock/skills --skill grill-me grill-with-docs --agent pi -g -y
 npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent pi -g -y
 ```
 
