@@ -15,17 +15,17 @@
  * - Brightness: selected metric per day (log-scaled)
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { BorderedLoader } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { BorderedLoader } from "@earendil-works/pi-coding-agent";
 import {
 	Key,
 	matchesKey,
-	sliceByColumn,
 	type Component,
 	type TUI,
 	truncateToWidth,
 	visibleWidth,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
+import { sliceByColumn } from "@earendil-works/pi-tui/dist/utils.js";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";

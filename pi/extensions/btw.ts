@@ -127,8 +127,8 @@ function extractEventAssistantText(message: unknown): string {
 }
 
 function getLastAssistantMessage(session: AgentSession): AssistantMessage | null {
-	for (let i = session.state.messages.length - 1; i >= 0; i--) {
-		const message = session.state.messages[i];
+	for (let i = session.agent.state.messages.length - 1; i >= 0; i--) {
+		const message = session.agent.state.messages[i];
 		if (message.role === "assistant") {
 			return message as AssistantMessage;
 		}
@@ -565,7 +565,8 @@ export default function (pi: ExtensionAPI) {
 
 		const seedMessages = buildSeedMessages(ctx, thread);
 		if (seedMessages.length > 0) {
-			session.agent.replaceMessages(seedMessages as typeof session.state.messages);
+			// Seed the side session through AgentState so it starts with the main context plus prior BTW turns.
+			session.agent.state.messages = seedMessages as typeof session.agent.state.messages;
 		}
 
 		const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
@@ -836,7 +837,15 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		const side = await ensureSideSession(ctx);
+		let side: SideSessionRuntime | null;
+		try {
+			side = await ensureSideSession(ctx);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			setOverlayStatus("Unable to create BTW side session.");
+			notify(ctx, message, "error");
+			return;
+		}
 		if (!side) {
 			notify(ctx, "Unable to create BTW side session.", "error");
 			return;

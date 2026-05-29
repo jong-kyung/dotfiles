@@ -48,12 +48,12 @@ import type {
 	TurnEndEvent,
 	MessageRenderer,
 	ModelRegistry,
-} from "@mariozechner/pi-coding-agent";
-import { getMarkdownTheme } from "@mariozechner/pi-coding-agent";
-import { complete, type Model, type Api, type UserMessage, type TextContent } from "@mariozechner/pi-ai";
-import { StringEnum } from "@mariozechner/pi-ai";
-import { Box, Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
-import { Type } from "@sinclair/typebox";
+} from "@earendil-works/pi-coding-agent";
+import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { complete, type Model, type Api, type UserMessage, type TextContent } from "@earendil-works/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { Box, Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
 import { promises as fs } from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
@@ -1057,14 +1057,6 @@ export default function (pi: ExtensionAPI) {
 			cliSendHandled = true;
 			await maybeHandleStartupControlSend(pi, ctx);
 		}
-	});
-
-	pi.on("session_switch", async (_event, ctx) => {
-		await refreshServer(ctx);
-	});
-
-	pi.on("session_fork", async (_event, ctx) => {
-		await refreshServer(ctx);
 	});
 
 	pi.on("session_shutdown", async () => {
