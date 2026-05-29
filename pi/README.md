@@ -13,7 +13,7 @@ This repo tracks the Pi extensions and project-owned skills used by the local gl
 - `pi/extensions/context.ts`
   - Adds `/context`, a TUI overview of loaded extensions, skills, context files, token usage, and session cost.
 - `pi/extensions/codegraph.ts`
-  - Adds the `codegraph` tool for semantic codebase search, context building, call graphs, impact analysis, and affected-test discovery. Requires the CodeGraph CLI on `PATH`.
+  - Adds the `codegraph` tool for semantic codebase search, context building, call graphs, impact analysis, and affected-test discovery. Automatically runs `codegraph sync --quiet` before read/query-style actions so the CLI-backed index stays fresh. Requires the CodeGraph CLI on `PATH`.
 - `pi/extensions/control.ts`
   - Adds session-control flags, `/control-sessions`, and optional `send_to_session` / `list_sessions` tools when Pi is launched with `--session-control`.
 - `pi/extensions/files.ts`

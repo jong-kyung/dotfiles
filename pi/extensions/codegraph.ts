@@ -31,6 +31,15 @@ const CODEGRAPH_ACTIONS = [
 const OUTPUT_FORMATS = new Set(["markdown", "json", "tree", "flat", "grouped"]);
 const FILE_FORMATS = new Set(["tree", "flat", "grouped"]);
 const CONTEXT_FORMATS = new Set(["markdown", "json"]);
+const AUTO_SYNC_ACTIONS = new Set<CodegraphParamsType["action"]>([
+	"query",
+	"files",
+	"context",
+	"callers",
+	"callees",
+	"impact",
+	"affected",
+]);
 
 const CodegraphParams = Type.Object({
 	action: StringEnum(CODEGRAPH_ACTIONS, {
@@ -89,6 +98,11 @@ type CodegraphDetails = {
 	path: string;
 	exitCode: number;
 	stderr?: string;
+	autoSync?: {
+		args: string[];
+		exitCode: number;
+		stderr?: string;
+	};
 	fullOutputPath?: string;
 	truncated?: boolean;
 };
@@ -268,6 +282,13 @@ export default function codegraphExtension(pi: ExtensionAPI) {
 
 		async execute(_toolCallId, params: CodegraphParamsType, signal, _onUpdate, ctx) {
 			const { args, projectPath } = buildArgs(params, ctx);
+			const syncArgs = ["sync", "--quiet", projectPath];
+			const syncResult = AUTO_SYNC_ACTIONS.has(params.action)
+				? await pi.exec("codegraph", syncArgs, {
+						signal,
+						timeout: timeoutFor("sync"),
+					})
+				: undefined;
 			const result = await pi.exec("codegraph", args, {
 				signal,
 				timeout: timeoutFor(params.action),
@@ -279,6 +300,10 @@ export default function codegraphExtension(pi: ExtensionAPI) {
 			}
 			if (!output.trim()) output = `(codegraph exited with code ${result.code}; no output)`;
 			if (result.code !== 0) output = `[codegraph exited with code ${result.code}]\n${output}`;
+			if (syncResult && syncResult.code !== 0) {
+				const syncOutput = syncResult.stderr?.trim() || syncResult.stdout?.trim() || "no output";
+				output = `[codegraph auto-sync exited with code ${syncResult.code}: ${syncOutput}]\n${output}`;
+			}
 
 			const truncated = await truncateForTool(output);
 			const details: CodegraphDetails = {
@@ -287,6 +312,13 @@ export default function codegraphExtension(pi: ExtensionAPI) {
 				path: projectPath,
 				exitCode: result.code ?? 0,
 				stderr: result.stderr || undefined,
+				autoSync: syncResult
+					? {
+							args: syncArgs,
+							exitCode: syncResult.code ?? 0,
+							stderr: syncResult.stderr || undefined,
+						}
+					: undefined,
 				fullOutputPath: truncated.fullOutputPath,
 				truncated: truncated.truncated,
 			};
@@ -310,6 +342,7 @@ export default function codegraphExtension(pi: ExtensionAPI) {
 			const details = result.details as CodegraphDetails | undefined;
 			const status = details?.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("warning", `exit ${details?.exitCode ?? "?"}`);
 			let text = `${status} CodeGraph ${details?.action ?? ""}`.trim();
+			if (details?.autoSync && details.autoSync.exitCode !== 0) text += theme.fg("warning", " (auto-sync failed)");
 			if (details?.truncated) text += theme.fg("warning", " (truncated)");
 			if (expanded) {
 				const content = result.content[0];
