@@ -25,7 +25,6 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
-import { sliceByColumn } from "@earendil-works/pi-tui/dist/utils.js";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -47,6 +46,60 @@ const TOD_BUCKETS: { key: TodKey; label: string; from: number; to: number }[] = 
 	{ key: "evening", label: "Evening (17–21)", from: 17, to: 21 },
 	{ key: "night", label: "Night (22–23)", from: 22, to: 23 },
 ];
+
+// Keep this local instead of importing private pi-tui internals;
+// private package paths can drift independently of pi's public extension API.
+const ANSI_CODE_PATTERN = /^\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/u;
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+function extractAnsiCode(text: string, index: number): { code: string; length: number } | undefined {
+	if (text.charCodeAt(index) !== 0x1b) return undefined;
+	const match = ANSI_CODE_PATTERN.exec(text.slice(index));
+	if (!match) return undefined;
+	return { code: match[0], length: match[0].length };
+}
+
+function sliceByColumn(line: string, startCol: number, length: number, strict = false): string {
+	if (length <= 0) return "";
+	const endCol = startCol + length;
+	let result = "";
+	let currentCol = 0;
+	let i = 0;
+	let pendingAnsi = "";
+
+	while (i < line.length) {
+		const ansi = extractAnsiCode(line, i);
+		if (ansi) {
+			if (currentCol >= startCol && currentCol < endCol) result += ansi.code;
+			else if (currentCol < startCol) pendingAnsi += ansi.code;
+			i += ansi.length;
+			continue;
+		}
+
+		let textEnd = i;
+		while (textEnd < line.length && !extractAnsiCode(line, textEnd)) textEnd++;
+
+		for (const { segment } of graphemeSegmenter.segment(line.slice(i, textEnd))) {
+			const segmentWidth = visibleWidth(segment);
+			const inRange = currentCol >= startCol && currentCol < endCol;
+			const fits = !strict || currentCol + segmentWidth <= endCol;
+			if (inRange && fits) {
+				if (pendingAnsi) {
+					result += pendingAnsi;
+					pendingAnsi = "";
+				}
+				result += segment;
+			}
+			currentCol += segmentWidth;
+			if (currentCol >= endCol) break;
+		}
+
+		i = textEnd;
+		if (currentCol >= endCol) break;
+	}
+
+	return result;
+}
 
 function todBucketForHour(hour: number): TodKey {
 	for (const b of TOD_BUCKETS) {
