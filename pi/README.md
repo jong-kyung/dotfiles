@@ -22,8 +22,6 @@ This repo tracks the Pi extensions and project-owned skills used by the local gl
   - Adds `/loop` and the `signal_loop_success` tool for follow-up loops that run until a breakout condition is met.
 - `pi/extensions/notify.ts`
   - Sends terminal-native notifications when Pi finishes work, waits for `ask_user` input, or receives a subagent async-completion event.
-- `pi/extensions/rtk-rewrite.ts`
-  - Rewrites bash tool commands through `rtk rewrite` when RTK is installed, reducing noisy command output.
 - `pi/extensions/session-breakdown.ts`
   - Adds `/session-breakdown`, an interactive usage dashboard for recent Pi sessions by model, cwd, day, time, tokens, and cost.
 - `pi/extensions/skill-manager/`
