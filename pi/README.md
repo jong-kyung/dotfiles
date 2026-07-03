@@ -86,7 +86,10 @@ These packages are currently used by the global pi setup.
 pi install npm:pi-subagents
 pi install npm:pi-ask-user
 pi install npm:pi-mcp-adapter
+pi install git:github.com/DietrichGebert/ponytail
 ```
+
+Ponytail adds always-on minimal-code guidance plus `/ponytail`, `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`, `/ponytail-gain`, and `/ponytail-help`. Set the default mode with `PONYTAIL_DEFAULT_MODE=lite|full|ultra|off` or `~/.config/ponytail/config.json`.
 
 Verify:
 
@@ -199,7 +202,7 @@ The current local `~/.pi/agent/skills/` includes:
 - Tracked project-owned skills from this repo: `acli-jira` from `pi/skills/acli-jira/`.
 - Loose local skills with no package-manager lock metadata: `skill-review`. Preserve it by copying its folder from an existing machine, or omit it on machines that do not need it.
 
-Installed Pi packages also provide runtime skills: `ask-user` from `pi-ask-user` and `pi-subagents` from `pi-subagents`.
+Installed Pi packages also provide runtime skills: `ask-user` from `pi-ask-user`, `pi-subagents` from `pi-subagents`, and `ponytail*` skills from Ponytail.
 
 ## Figma MCP skills
 
@@ -311,6 +314,7 @@ npx skills update -g -y
 pi install npm:pi-subagents
 pi install npm:pi-ask-user
 pi install npm:pi-mcp-adapter
+pi install git:github.com/DietrichGebert/ponytail
 
 # 1b. Required CLIs for tracked extensions
 codegraph --version  # install CodeGraph CLI first if this fails
