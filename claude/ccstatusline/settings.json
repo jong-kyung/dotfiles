@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "lines": [
+    [
+      {
+        "id": "1",
+        "type": "model",
+        "color": "cyan"
+      },
+      {
+        "id": "4",
+        "type": "separator"
+      },
+      {
+        "id": "5",
+        "type": "tokens-total",
+        "color": "brightMagenta"
+      }
+    ],
+    [
+      {
+        "id": "6c783637-4e46-4f22-b3bc-b0d27ab41bce",
+        "type": "session-usage",
+        "color": "brightBlue"
+      },
+      {
+        "id": "e0913ed8-21d2-4fcb-a835-6a7c8151fb4c",
+        "type": "separator"
+      },
+      {
+        "id": "dc5a7f7f-c11f-4562-8ada-be0571b58372",
+        "type": "weekly-usage",
+        "color": "brightBlack"
+      }
+    ],
+    [
+      {
+        "id": "25e93bd1-9484-4f08-a24a-81924ce6d974",
+        "type": "context-percentage",
+        "color": "brightMagenta"
+      }
+    ]
+  ],
+  "flexMode": "full-minus-40",
+  "compactThreshold": 60,
+  "colorLevel": 2,
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "powerline": {
+    "enabled": false,
+    "separators": [
+      ""
+    ],
+    "separatorInvertBackground": [
+      false
+    ],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": false
+  }
+}
