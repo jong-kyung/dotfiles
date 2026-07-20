@@ -8,6 +8,8 @@ This repo tracks the Pi extensions and project-owned skills used by the local gl
 
 - `pi/skills/acli-jira/`
   - Adds the `acli-jira` skill for working with Jira Cloud from the command line using Atlassian's official `acli` tool.
+- `pi/skills/codegraph/`
+  - Adds the `codegraph` skill documenting the CodeGraph CLI for semantic code navigation, call graphs, impact analysis, and affected-test discovery. Shared with the Claude Code setup via symlinks in `claude/skills/`.
 - `pi/extensions/btw.ts`
   - Adds `/btw`, a side-channel assistant popover for quick questions without disrupting the main thread.
 - `pi/extensions/context.ts`
@@ -45,12 +47,14 @@ Install or refresh tracked local skills globally with:
 ```bash
 mkdir -p ~/.pi/agent/skills
 rsync -a --delete pi/skills/acli-jira/ ~/.pi/agent/skills/acli-jira/
+rsync -a --delete pi/skills/codegraph/ ~/.pi/agent/skills/codegraph/
 ```
 
-Verify the tracked skill is in sync; no output means there is no drift:
+Verify the tracked skills are in sync; no output means there is no drift:
 
 ```bash
 rsync -ain --delete pi/skills/acli-jira/ ~/.pi/agent/skills/acli-jira/
+rsync -ain --delete pi/skills/codegraph/ ~/.pi/agent/skills/codegraph/
 ```
 
 Restart pi after extension or skill changes so loaded commands, tools, and skills refresh.
@@ -199,7 +203,7 @@ The current local `~/.pi/agent/skills/` includes:
 
 - Compound Engineering bundle skills (`ce-*`, `lfg`) from `~/.pi/agent/compound-engineering/install-manifest.json`.
 - Figma workflow skills installed from `figma/mcp-server-guide` (see below).
-- Tracked project-owned skills from this repo: `acli-jira` from `pi/skills/acli-jira/`.
+- Tracked project-owned skills from this repo: `acli-jira` from `pi/skills/acli-jira/` and `codegraph` from `pi/skills/codegraph/`.
 - Loose local skills with no package-manager lock metadata: `skill-review`. Preserve it by copying its folder from an existing machine, or omit it on machines that do not need it.
 
 Installed Pi packages also provide runtime skills: `ask-user` from `pi-ask-user`, `pi-subagents` from `pi-subagents`, and `ponytail*` skills from Ponytail.
@@ -293,6 +297,9 @@ npx skills add https://github.com/mattpocock/skills --skill grill-me grill-with-
 
 # React quality checker
 npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent pi -g -y
+
+# Writing quality guard against AI slop
+npx skills add https://github.com/hardikpandya/stop-slop --skill stop-slop --agent pi -g -y
 ```
 
 Verify:
@@ -323,6 +330,7 @@ codegraph --version  # install CodeGraph CLI first if this fails
 mkdir -p ~/.pi/agent/extensions ~/.pi/agent/skills
 rsync -a --delete --delete-excluded --exclude '__tests__/' pi/extensions/ ~/.pi/agent/extensions/
 rsync -a --delete pi/skills/acli-jira/ ~/.pi/agent/skills/acli-jira/
+rsync -a --delete pi/skills/codegraph/ ~/.pi/agent/skills/codegraph/
 
 # 3. Compound Engineering
 bunx @every-env/compound-plugin install compound-engineering --to pi
@@ -344,6 +352,7 @@ npx skills add https://github.com/vercel-labs/agent-skills \
 npx skills add https://github.com/GoogleChrome/modern-web-guidance --skill modern-web-guidance --agent pi -g -y
 npx skills add https://github.com/mattpocock/skills --skill grill-me grill-with-docs --agent pi -g -y
 npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent pi -g -y
+npx skills add https://github.com/hardikpandya/stop-slop --skill stop-slop --agent pi -g -y
 ```
 
 ## Security notes
