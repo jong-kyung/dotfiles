@@ -103,34 +103,34 @@ Claude Code auto-loads skills from `~/.claude/skills/`, where these are installe
 
 ```bash
 # Skill discovery helper
-npx skills add https://github.com/vercel-labs/skills --skill find-skills --agent claude -g -y
+npx skills add https://github.com/vercel-labs/skills --skill find-skills --agent claude-code -g -y
 
 # Browser automation (CLI + skill)
 brew install agent-browser
-npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser --agent claude -g -y
+npx skills add https://github.com/vercel-labs/agent-browser --skill agent-browser --agent claude-code -g -y
 
 # React / UI engineering skills
 npx skills add https://github.com/vercel-labs/agent-skills \
   --skill vercel-react-best-practices vercel-composition-patterns web-design-guidelines \
-  --agent claude -g -y
+  --agent claude-code -g -y
 
 # Current browser platform guidance for frontend work
-npx skills add https://github.com/GoogleChrome/modern-web-guidance --skill modern-web-guidance --agent claude -g -y
+npx skills add https://github.com/GoogleChrome/modern-web-guidance --skill modern-web-guidance --agent claude-code -g -y
 
 # Planning/doc review helpers
-npx skills add https://github.com/mattpocock/skills --skill grill-me grill-with-docs --agent claude -g -y
+npx skills add https://github.com/mattpocock/skills --skill grill-me grill-with-docs --agent claude-code -g -y
 
 # React quality checker
-npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent claude -g -y
+npx skills add https://github.com/millionco/react-doctor --skill react-doctor --agent claude-code -g -y
 
 # Writing quality guard against AI slop
-npx skills add https://github.com/hardikpandya/stop-slop --skill stop-slop --agent claude -g -y
+npx skills add https://github.com/hardikpandya/stop-slop --skill stop-slop --agent claude-code -g -y
 ```
 
 Verify:
 
 ```bash
-npx skills list -g --agent claude
+npx skills list -g --agent claude-code
 ```
 
 ## Prompts to paste into Claude Code
@@ -140,7 +140,7 @@ For a full setup on a new machine:
 ```text
 Configure the Claude Code global environment using claude/README.md in this repo.
 Check whether each item is already installed or in sync first, and install or sync only the missing/drifted items.
-After setup, verify with the diff drift checks, the codegraph-guard smoke test, /plugin list, and npx skills list -g --agent claude.
+After setup, verify with the diff drift checks, the codegraph-guard smoke test, /plugin list, and npx skills list -g --agent claude-code.
 ```
 
 For a status check without changes:
