@@ -12,6 +12,8 @@ This directory manages the Claude Code global configuration used by this reposit
   - Terminal-native notifications on `Stop`, `Notification`, and `SubagentStop`. A standalone bun script (no pi dependency) with its own terminal detection (ghostty/iTerm2 → OSC 9, kitty → OSC 99, Warp/WezTerm → OSC 777). Writes to `/dev/tty` because Claude Code captures hook stdout; stays silent when the terminal is unsupported, signals conflict, or no tty is available.
 - `claude/hooks/codegraph-guard.ts`
   - `PreToolUse` guard enforcing the CodeGraph-first policy: denies the `Grep` tool and Bash search commands (`rg`, `grep`, `ack`, `ag`, `fd`, `find`, `git grep`). Escape hatch for exact literal searches: prefix the shell command with `ALLOW_SEARCH=1`.
+- `claude/hooks/readonly-gh-api.ts`
+  - `PreToolUse` guard restricting `gh api` to readonly usage (port of `pi/extensions/readonly-gh-api.ts`). Denies Bash `gh api` calls that mutate: write methods (`-X`/`--method POST|PATCH|PUT|DELETE`), field flags (`-f`/`-F`/`--field`/`--raw-field`/`--input`, which make `gh api` default to POST), or `gh api graphql`.
 - `claude/settings.hooks.json`
   - The complete `hooks` value for `~/.claude/settings.json`. It replaces the `hooks` key wholesale — nothing outside this fragment is expected to live there.
 - `claude/ccstatusline/settings.json`
@@ -74,6 +76,13 @@ Smoke-test the guard hook:
 ```bash
 echo '{"tool_name":"Bash","tool_input":{"command":"rg foo"}}' | bun ~/.claude/hooks/codegraph-guard.ts   # prints a deny decision
 echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bun ~/.claude/hooks/codegraph-guard.ts        # prints nothing
+```
+
+Smoke-test the `gh api` guard:
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"gh api -X POST /repos/o/r/issues"}}' | bun ~/.claude/hooks/readonly-gh-api.ts   # prints a deny decision
+echo '{"tool_name":"Bash","tool_input":{"command":"gh api /repos/o/r/issues"}}' | bun ~/.claude/hooks/readonly-gh-api.ts           # prints nothing
 ```
 
 Restart Claude Code after installing so hooks, skills, and CLAUDE.md reload.
