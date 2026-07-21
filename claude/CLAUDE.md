@@ -72,4 +72,4 @@ Use the CodeGraph CLI (via the `codegraph` skill and Bash) as the primary code-n
 - Start non-trivial code changes with `codegraph explore "<task>"`, then inspect exact files with Read.
 - Before changing shared symbols, use `codegraph callers`, `codegraph callees`, or `codegraph impact`.
 - After changing files, use `codegraph affected <files>` to choose focused tests.
-- Still use exact text search for literal error messages, config keys, user-visible strings, or files that may not be indexed. When a search is blocked by the codegraph guard hook but an exact text search is genuinely needed, rerun the shell command with `ALLOW_SEARCH=1` prefixed.
+- Still use exact text search for literal error messages, config keys, user-visible strings, or files that may not be indexed.

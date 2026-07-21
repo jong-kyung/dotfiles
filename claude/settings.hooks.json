@@ -2,15 +2,6 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Grep|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun \"$HOME/.claude/hooks/codegraph-guard.ts\""
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {

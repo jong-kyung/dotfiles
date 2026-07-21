@@ -10,8 +10,6 @@ This directory manages the Claude Code global configuration used by this reposit
   - Symlinks into `../pi/skills/` (`acli-jira`, `codegraph`). `pi/skills/` is the single source of truth for skills shared between pi and Claude Code. Install with `rsync -L` so the symlinks are materialized as real directories.
 - `claude/hooks/notify.ts`
   - Terminal-native notifications on `Stop`, `Notification`, and `SubagentStop`. A standalone bun script (no pi dependency) with its own terminal detection (ghostty/iTerm2 → OSC 9, kitty → OSC 99, Warp/WezTerm → OSC 777). Writes to `/dev/tty` because Claude Code captures hook stdout; stays silent when the terminal is unsupported, signals conflict, or no tty is available.
-- `claude/hooks/codegraph-guard.ts`
-  - `PreToolUse` guard enforcing the CodeGraph-first policy: denies the `Grep` tool and Bash search commands (`rg`, `grep`, `ack`, `ag`, `fd`, `find`, `git grep`). Escape hatch for exact literal searches: prefix the shell command with `ALLOW_SEARCH=1`.
 - `claude/hooks/readonly-gh-api.ts`
   - `PreToolUse` guard restricting `gh api` to readonly usage (port of `pi/extensions/readonly-gh-api.ts`). Denies Bash `gh api` calls that mutate: write methods (`-X`/`--method POST|PATCH|PUT|DELETE`), field flags (`-f`/`-F`/`--field`/`--raw-field`/`--input`, which make `gh api` default to POST), or `gh api graphql`.
 - `claude/settings.hooks.json`
@@ -69,13 +67,6 @@ diff -r claude/skills/codegraph ~/.claude/skills/codegraph
 diff -r claude/hooks ~/.claude/hooks
 diff claude/CLAUDE.md ~/.claude/CLAUDE.md
 diff claude/ccstatusline/settings.json ~/.config/ccstatusline/settings.json
-```
-
-Smoke-test the guard hook:
-
-```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"rg foo"}}' | bun ~/.claude/hooks/codegraph-guard.ts   # prints a deny decision
-echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | bun ~/.claude/hooks/codegraph-guard.ts        # prints nothing
 ```
 
 Smoke-test the `gh api` guard:
@@ -149,7 +140,7 @@ For a full setup on a new machine:
 ```text
 Configure the Claude Code global environment using claude/README.md in this repo.
 Check whether each item is already installed or in sync first, and install or sync only the missing/drifted items.
-After setup, verify with the diff drift checks, the codegraph-guard smoke test, /plugin list, and npx skills list -g --agent claude-code.
+After setup, verify with the diff drift checks, the readonly-gh-api smoke test, /plugin list, and npx skills list -g --agent claude-code.
 ```
 
 For a status check without changes:
