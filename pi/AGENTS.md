@@ -19,10 +19,16 @@ Never create a pull request or post a comment on a pull request without the user
 Create pull requests as drafts by default after receiving approval to create them.
 
 
-## Writing style
+# Writing style
 
-Do not hard-wrap prose paragraphs in Markdown.
+Write prose as natural, complete sentences. Do not hard-wrap paragraphs in Markdown.
 
-Prefer explicit connective words over symbol-based connectives (`—`, `;`, `:`) when expressing a logical relation between clauses, such as cause, contrast, consequence, or elaboration. Name the relation in words (for example `because`, `so`, `but`, `which means`, `for example`) so the sentence structure survives being read aloud. This targets logical connectives only, so keep punctuation for genuinely structural uses such as a colon before a list.
+Prefer words and sentence structure over symbols or shorthand. When expressing cause, contrast, consequence, conditions, examples, or elaboration, state the relationship explicitly with words such as “because,” “but,” “so,” “therefore,” “which means,” and “for example.”
 
-When writing instructions, state defaults directly. Avoid redundant exception clauses such as `unless explicitly requested` when an instruction already establishes a default. Keep explicit exceptions when they define safety or permission boundaries.
+Avoid using em dashes, semicolons, slashes, arrows, ampersands, parentheses, or similar symbols when the same meaning can be expressed clearly in ordinary prose. Rewrite compressed expressions as complete sentences rather than joining ideas with symbols.
+
+Use punctuation only when it serves a necessary grammatical or structural purpose. For example, commas and periods should separate clauses and sentences, while a colon may introduce a list when that structure is clearer than a full sentence.
+
+When writing instructions, state the expected behavior directly and affirmatively. Avoid unnecessary qualifications, repeated conditions, and exception phrases such as “unless explicitly requested” when the default rule already communicates the intended behavior.
+
+Prefer readable sentence flow over compactness. Do not sacrifice clarity merely to make the text shorter.
