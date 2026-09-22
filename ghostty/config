@@ -13,11 +13,11 @@ window-padding-y = 10
 window-decoration = true
 macos-titlebar-style = tabs
 
-# Background (반투명 + 블러)
+# Background
 background-opacity = 0.9
 background-blur-radius = 20
 
-# Autosuggestion color (가독성을 위해 밝게)
+# Autosuggestion color
 palette = 8=#7f849c
 
 # Cursor
