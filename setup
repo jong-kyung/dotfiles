@@ -224,10 +224,12 @@ ai_stage() {
     if ! has codegraph; then installer https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh /bin/sh; fi
     if ! has ccstatusline; then bun install -g ccstatusline; fi
     pi mcp --help >/dev/null 2>&1 || die 'Pi needs native MCP support. Upgrade Pi explicitly, then retry.'
-    # Approve legacy transport changes before removing the working adapter.
+    # Approve transport changes and native MCP activation before removing the working adapter.
     before=$PENDING
     merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
     [ "$PENDING" -eq "$before" ] || die 'Native MCP configuration was declined; adapter removal was not attempted.'
+    merge_json pi "$HOME/.pi/agent/settings.json"
+    [ "$PENDING" -eq "$before" ] || die 'Native MCP activation was declined; adapter removal was not attempted.'
     source=$(pi_source npm:pi-mcp-adapter)
     if [ -n "$source" ]; then
       confirm 'Remove pi-mcp-adapter so Pi native MCP can run?' || die 'Pi native MCP is blocked by the adapter.'
@@ -269,8 +271,10 @@ ai_stage() {
   done
   copy_file "$ROOT/claude/hooks/readonly-gh-api.ts" "$HOME/.claude/hooks/readonly-gh-api.ts"
   copy_file "$ROOT/claude/ccstatusline/settings.json" "$HOME/.config/ccstatusline/settings.json"
-  merge_json pi "$HOME/.pi/agent/settings.json"
-  if $DRY_RUN; then merge_json pi-mcp "$HOME/.pi/agent/mcp.json"; fi
+  if $DRY_RUN; then
+    merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
+    merge_json pi "$HOME/.pi/agent/settings.json"
+  fi
   merge_json claude-mcp "$HOME/.claude.json"
   merge_json claude "$HOME/.claude/settings.json"
   if ! $DRY_RUN; then
