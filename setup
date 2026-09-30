@@ -5,42 +5,32 @@ umask 077
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 DRY_RUN=false
+ALL_STAGES=(brew shell git ghostty pi claude)
 STAGES=()
-PENDING=0
+REQUESTED=
 WORK=
 BACKUPS=
 TERMINAL_STATE=
+AI_PREPARED=false
 
 source "$ROOT/scripts/setup/common.sh"
+source "$ROOT/scripts/setup/ai.sh"
 
 usage() {
-  printf 'Usage: ./setup [--dry-run] [brew shell git ghostty ai ...]\n'
-  printf 'No stages means all stages, in the order above. Updates are never automatic.\n'
+  printf 'Usage: ./setup [--dry-run] [brew shell git ghostty pi claude ai ...]\n'
+  printf 'No stages opens a numbered menu. Use commas (1,3,5) or all. ai selects Pi and Claude Code.\n'
+  printf 'Dry-run without stages previews all stages. Updates are never automatic.\n'
 }
 
 for arg in "$@"; do
   case "$arg" in
-    --dry-run)
-      DRY_RUN=true
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    brew|shell|git|ghostty|ai)
-      STAGES+=("$arg")
-      ;;
-    *)
-      usage >&2
-      printf 'Unknown argument: %s\n' "$arg" >&2
-      exit 1
-      ;;
+    --dry-run) DRY_RUN=true ;;
+    -h|--help) usage; exit 0 ;;
+    brew|shell|git|ghostty|pi|claude) REQUESTED="$REQUESTED $arg" ;;
+    ai) REQUESTED="$REQUESTED pi claude" ;;
+    *) usage >&2; die "Unknown argument: $arg" ;;
   esac
 done
-
-if [ ${#STAGES[@]} -eq 0 ]; then
-  STAGES=(brew shell git ghostty ai)
-fi
 
 if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
   die 'Only Apple Silicon macOS is supported.'
@@ -51,21 +41,56 @@ if ! $DRY_RUN; then
   [ "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" = "$HOME/.pi/agent" ] || die 'Custom PI_CODING_AGENT_DIR is not supported.'
   [ "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" = "$HOME/.claude" ] || die 'Custom CLAUDE_CONFIG_DIR is not supported.'
   [ "${GNUPGHOME:-$HOME/.gnupg}" = "$HOME/.gnupg" ] || die 'Custom GNUPGHOME is not supported.'
+  [ -t 0 ] || die 'Run in an interactive terminal to approve changes. Use --dry-run to preview.'
 
-  if [ -t 0 ]; then
-    TERMINAL_STATE=$(stty -g)
-  fi
+  TERMINAL_STATE=$(stty -g)
   trap 'restore_terminal; if [ -n "$WORK" ]; then rm -rf "$WORK"; fi' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  WORK=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles.XXXXXX")
+fi
+
+if [ -n "$REQUESTED" ]; then
+  for stage in "${ALL_STAGES[@]}"; do
+    case " $REQUESTED " in
+      *" $stage "*) STAGES+=("$stage") ;;
+    esac
+  done
+elif $DRY_RUN; then
+  STAGES=("${ALL_STAGES[@]}")
+else
+  select_stages
 fi
 
 export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 
 for stage in "${STAGES[@]}"; do
-  log "$stage"
   source "$ROOT/scripts/setup/$stage.sh"
+done
+
+printf '\nSelected: %s\n' "${STAGES[*]}"
+(
+  DRY_RUN=true
+  for stage in "${STAGES[@]}"; do
+    log "$stage"
+    "${stage}_stage"
+  done
+)
+
+if $DRY_RUN; then
+  printf '\nPreview only. Nothing changed.\n'
+  exit 0
+fi
+
+printf '\nExisting settings will be backed up before replacement or merge. Identical files are skipped.\n'
+printf 'Selected stages run in the listed order. External installers may request authentication.\n'
+if ! confirm 'Apply all selected stages?'; then
+  printf 'Cancelled. Nothing changed.\n'
+  exit 0
+fi
+
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles.XXXXXX")
+for stage in "${STAGES[@]}"; do
+  log "$stage"
   "${stage}_stage"
   restore_terminal
 done
@@ -73,14 +98,4 @@ done
 if [ -n "$BACKUPS" ]; then
   printf '\nBackups: %s\n' "$BACKUPS"
 fi
-
-if [ "$PENDING" -gt 0 ]; then
-  printf '\n%d change(s) declined. Resolve them and rerun the stage.\n' "$PENDING"
-  exit 2
-fi
-
-if $DRY_RUN; then
-  printf '\nPreview only. Nothing changed.\n'
-else
-  printf '\nSetup complete. Open a new terminal to load shell changes.\n'
-fi
+printf '\nSetup complete. Open a new terminal to load shell changes.\n'

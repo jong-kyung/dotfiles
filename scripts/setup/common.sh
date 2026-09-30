@@ -33,9 +33,30 @@ confirm() {
   esac
 }
 
-pending() {
-  printf 'Skipped: %s\n' "$*" >&2
-  PENDING=$((PENDING + 1))
+select_stages() {
+  local choice i
+  printf '\n1. Homebrew\n2. Shell\n3. Git\n4. Ghostty\n5. Pi\n6. Claude Code\n'
+  printf 'On a new Mac, select Homebrew and Shell before other stages.\n'
+  while true; do
+    printf '\nSelect numbers separated by commas (1,3,5), all, or Enter to cancel: '
+    IFS= read -r choice || choice=
+    choice=${choice//[[:space:]]/}
+    case "$choice" in
+      '') printf 'Cancelled. Nothing changed.\n'; exit 0 ;;
+      all) STAGES=("${ALL_STAGES[@]}"); return ;;
+    esac
+    if [[ ! "$choice" =~ ^[1-6](,[1-6])*$ ]]; then
+      printf 'Use numbers 1 through 6 separated by commas, or all.\n' >&2
+      continue
+    fi
+    STAGES=()
+    for i in "${!ALL_STAGES[@]}"; do
+      case ",$choice," in
+        *",$((i + 1)),"*) STAGES+=("${ALL_STAGES[$i]}") ;;
+      esac
+    done
+    return
+  done
 }
 
 backup() {
@@ -61,24 +82,22 @@ backup() {
 
 copy_file() {
   local source=$1 target=$2 temp
-  if $DRY_RUN; then
-    printf 'Copy: %s -> %s\n' "${source#"$ROOT"/}" "$target"
-    return
-  fi
-
   if [ -f "$target" ] && [ ! -L "$target" ] && cmp -s "$source" "$target"; then
     printf 'Unchanged: %s\n' "$target"
     return
   fi
 
   [ ! -d "$target" ] || die "Expected a file, found a directory: $target"
-  if [ -e "$target" ] || [ -L "$target" ]; then
-    if ! confirm "Back up and replace $target?"; then
-      pending "$target"
-      return
+  if $DRY_RUN; then
+    if [ -e "$target" ] || [ -L "$target" ]; then
+      printf 'Back up and replace: %s\n' "$target"
+    else
+      printf 'Create: %s\n' "$target"
     fi
-    backup "$target"
+    return
   fi
+
+  backup "$target"
 
   mkdir -p "$(dirname "$target")"
   temp=$(mktemp "$target.tmp.XXXXXX")
@@ -92,7 +111,7 @@ copy_file() {
 merge_json() {
   local mode=$1 target=$2
   if $DRY_RUN; then
-    printf 'Merge managed %s settings: %s\n' "$mode" "$target"
+    printf 'Merge managed %s settings (back up if changed): %s\n' "$mode" "$target"
     return
   fi
 

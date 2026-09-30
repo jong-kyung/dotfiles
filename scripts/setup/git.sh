@@ -1,6 +1,8 @@
 git_stage() {
   if $DRY_RUN; then
-    log 'git: merge shared preferences into ~/.gitconfig, preserve identity/signing/includes, and configure GPG pinentry'
+    log 'git: merge shared preferences, preserve identity/signing/includes, and configure GPG pinentry'
+    printf 'Merge Git preferences (back up if changed): %s\n' "$HOME/.gitconfig"
+    printf 'Set pinentry-program (back up if changed): %s\n' "$HOME/.gnupg/gpg-agent.conf"
     return
   fi
 

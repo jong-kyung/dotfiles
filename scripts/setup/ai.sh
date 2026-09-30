@@ -1,3 +1,4 @@
+# Shared helpers for the independently selectable Pi and Claude Code stages.
 pi_source() {
   node "$ROOT/scripts/setup-query.mjs" pi-source "$1"
 }
@@ -32,93 +33,46 @@ claude_plugin() {
   fi
 }
 
-install_skill() {
-  local repo=$1 skill=$2 name pair dest
-  name=${skill##*/}
-  for pair in "pi:$HOME/.pi/agent" "claude-code:$HOME/.claude"; do
-    dest="${pair#*:}/skills/$name"
+install_skills() {
+  local agent=$1 directory=$2 repo skill name dest
+  if $DRY_RUN; then
+    printf 'Install missing skills from skills.json for %s; preserve existing skills.\n' "$agent"
+    return
+  fi
+
+  while IFS=$'\t' read -r repo skill; do
+    name=${skill##*/}
+    dest="$directory/skills/$name"
     if [ -f "$dest/SKILL.md" ]; then
       printf 'Existing skill preserved: %s (use gh skill update separately)\n' "$dest"
     else
-      gh skill install "$repo" "$skill" --agent "${pair%%:*}" --scope user
+      gh skill install "$repo" "$skill" --agent "$agent" --scope user
     fi
-  done
+  done < "$WORK/skills"
 }
 
-ai_stage() {
-  local file repo skill
+ai_prepare() {
+  if ${AI_PREPARED:-false}; then
+    return
+  fi
   if $DRY_RUN; then
-    log 'ai: Pi, Claude Code, CodeGraph official MCP, ccstatusline; selected packages and official skills; no Figma/Jira'
-    log 'ai: legacy files, packages and plugins are preserved'
+    log 'shared AI tools: CodeGraph, gh-stack extension and agent-browser Chrome'
+    printf 'Install missing tools only. Legacy files, packages and plugins are preserved.\n'
   else
-    need vp
     need node
-    need bun
     need gh
     need agent-browser
     node "$ROOT/scripts/setup-query.mjs" skills "$ROOT/skills.json" > "$WORK/skills"
-    gh auth status >/dev/null 2>&1 || die 'Run gh auth login yourself, then rerun ./setup ai (official skill installation requires GitHub access).'
+    gh auth status >/dev/null 2>&1 || die 'Run gh auth login yourself, then retry (official skill installation requires GitHub access).'
     gh skill install --help >/dev/null 2>&1 || die 'Your gh lacks skill install. Upgrade gh explicitly, then retry.'
 
-    if ! has pi; then
-      vp install -g @earendil-works/pi-coding-agent --ignore-scripts
-    fi
-    if ! has claude; then
-      installer https://claude.ai/install.sh /bin/bash stable
-    fi
     if ! has codegraph; then
       installer https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh /bin/sh
     fi
-    if ! has ccstatusline; then
-      bun install -g ccstatusline
-    fi
-    pi mcp --help >/dev/null 2>&1 || die 'Pi needs native MCP support. Upgrade Pi explicitly, then retry.'
-
-    merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
-    merge_json pi "$HOME/.pi/agent/settings.json"
-
-    pi_package npm:pi-subagents "$HOME/.pi/agent/npm/node_modules/pi-subagents"
-    pi_package npm:pi-ask-user "$HOME/.pi/agent/npm/node_modules/pi-ask-user"
-    pi_package git:github.com/DietrichGebert/ponytail "$HOME/.pi/agent/git/github.com/DietrichGebert/ponytail"
-    pi_package git:github.com/EveryInc/compound-engineering-plugin "$HOME/.pi/agent/git/github.com/EveryInc/compound-engineering-plugin"
-    claude_plugin DietrichGebert/ponytail ponytail ponytail@ponytail
-    claude_plugin EveryInc/compound-engineering-plugin compound-engineering-plugin compound-engineering@compound-engineering-plugin
-
     if ! gh extension list | grep -F 'github/gh-stack' >/dev/null; then
       gh extension install github/gh-stack
     fi
-    while IFS=$'\t' read -r repo skill; do
-      install_skill "$repo" "$skill"
-    done < "$WORK/skills"
     agent-browser install
-
-    # Herdr owns this generated integration; do not vendor its files here.
-    if [ ! -f "$HOME/.pi/agent/extensions/herdr-agent-state.ts" ]; then
-      need herdr
-      herdr integration install pi
-    fi
   fi
-
-  copy_file "$ROOT/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
-  copy_file "$ROOT/AGENTS.md" "$HOME/.claude/CLAUDE.md"
-  for file in context files loop notify readonly-gh-api session-breakdown; do
-    copy_file "$ROOT/pi/extensions/$file.ts" "$HOME/.pi/agent/extensions/$file.ts"
-  done
-  copy_file "$ROOT/claude/hooks/readonly-gh-api.ts" "$HOME/.claude/hooks/readonly-gh-api.ts"
-  copy_file "$ROOT/claude/ccstatusline/settings.json" "$HOME/.config/ccstatusline/settings.json"
-  if $DRY_RUN; then
-    merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
-    merge_json pi "$HOME/.pi/agent/settings.json"
-  fi
-  merge_json claude-mcp "$HOME/.claude.json"
-  merge_json claude "$HOME/.claude/settings.json"
-
-  if ! $DRY_RUN; then
-    pi --version
-    claude --version
-    codegraph --version
-    pi list
-    printf 'Restart Pi/Claude. Sign in manually. Run pi mcp list and Claude /mcp to verify CodeGraph.\n'
-    printf 'Project indexes are opt-in: run codegraph init in each chosen project yourself.\n'
-  fi
+  AI_PREPARED=true
 }

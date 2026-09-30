@@ -13,7 +13,9 @@ cd dotfiles
 ./setup
 ```
 
-Run as your own user, without `sudo`. Homebrew may request administrator authentication. If setup stops at the AI stage because GitHub authentication is missing, sign in and resume:
+Run as your own user, without `sudo`. `./setup` shows a numbered menu. Enter comma-separated numbers such as `1,3,5`, or `all` for everything. Empty input cancels, and invalid input prompts again. Review the selected work and approve it once. Homebrew and other external installers may still request authentication.
+
+If setup stops at an AI stage because GitHub authentication is missing, sign in and resume:
 
 ```sh
 gh auth login
@@ -29,25 +31,31 @@ Sign in to Pi and Claude Code yourself after installation. Setup does not copy c
 ./setup shell                # Vite+, Bun, Rust, Oh My Zsh, and .zshrc
 ./setup git                  # Shared Git preferences and GPG pinentry
 ./setup ghostty              # Ghostty configuration
-./setup ai                   # AI tools, extensions, skills, and CodeGraph MCP
-./setup --dry-run git ai     # Preview selected stages without changes
+./setup pi                   # Pi packages, extensions, skills, and CodeGraph MCP
+./setup claude               # Claude Code plugins, hooks, skills, and CodeGraph MCP
+./setup ai                   # Both Pi and Claude Code
+./setup --dry-run git pi     # Preview selected stages without changes
 ```
 
-With no arguments, setup runs all stages in the order above. Run `brew` and `shell` before other stages on a new Mac. Rerun a stage after fixing an installation error. Exit code `2` means you declined configuration changes.
+The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Pi, and `6` for Claude Code. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. `--dry-run` never prompts and previews all stages when none are specified. Actual installation requires an interactive terminal.
+
+Run `brew` and `shell` before other stages on a new Mac. Rerun a stage after fixing an installation error. Cancelling exits without changes.
 
 `setup` handles arguments and dispatches stages from `scripts/setup/`. Shared confirmation, backup, and copy helpers live in `scripts/setup/common.sh`.
 
 See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code guide](claude/README.md) for the selected tools and settings. Setup leaves macOS system preferences alone.
 
-[skills.json](skills.json) lists directly installed skills by repository and skill directory path. `./setup ai` installs missing entries for both Pi and Claude Code with `gh skill install`. Existing skills are preserved, and removing an entry does not uninstall it. Pi packages and Claude plugins are managed separately.
+[skills.json](skills.json) lists directly installed skills by repository and skill directory path. The Pi and Claude Code stages each install missing entries for their own agent with `gh skill install`. Existing skills are preserved, and removing an entry does not uninstall it. Pi packages and Claude plugins are managed separately.
 
 ## Configuration and backups
 
-Edit files in this repository and rerun the relevant stage. Setup skips identical files and asks before backing up and replacing existing files or symlinks. Git and JSON changes preserve unrelated settings. The Pi MCP settings merge disables unsupported legacy SSE servers after confirmation. Setup does not delete legacy files, packages, or plugins.
+Edit files in this repository and rerun the relevant stage. Setup previews the affected paths before the single approval, then backs up and replaces existing files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
 
 Backups live in `~/.local/state/dotfiles/backups/<run-id>/`, with paths relative to your home directory. Restore files from there when needed. Keep these private backups out of Git.
 
 [AGENTS.md](AGENTS.md) is the shared instruction source. Setup copies it to Pi's `~/.pi/agent/AGENTS.md` and Claude's `~/.claude/CLAUDE.md`.
+
+Setup restores the original terminal settings before confirmation, between stages, and on exit so external commands cannot leave the next prompt in raw mode.
 
 Setup uses standard home-directory paths. Custom `PI_CODING_AGENT_DIR`, `CLAUDE_CONFIG_DIR`, and `GNUPGHOME` locations are not supported.
 
