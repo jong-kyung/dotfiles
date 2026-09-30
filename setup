@@ -9,6 +9,7 @@ STAGES=()
 PENDING=0
 WORK=
 BACKUPS=
+TERMINAL_STATE=
 
 source "$ROOT/scripts/setup/common.sh"
 
@@ -51,8 +52,13 @@ if ! $DRY_RUN; then
   [ "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" = "$HOME/.claude" ] || die 'Custom CLAUDE_CONFIG_DIR is not supported.'
   [ "${GNUPGHOME:-$HOME/.gnupg}" = "$HOME/.gnupg" ] || die 'Custom GNUPGHOME is not supported.'
 
+  if [ -t 0 ]; then
+    TERMINAL_STATE=$(stty -g)
+  fi
+  trap 'restore_terminal; if [ -n "$WORK" ]; then rm -rf "$WORK"; fi' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   WORK=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles.XXXXXX")
-  trap 'rm -rf "$WORK"' EXIT
 fi
 
 export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
@@ -61,6 +67,7 @@ for stage in "${STAGES[@]}"; do
   log "$stage"
   source "$ROOT/scripts/setup/$stage.sh"
   "${stage}_stage"
+  restore_terminal
 done
 
 if [ -n "$BACKUPS" ]; then

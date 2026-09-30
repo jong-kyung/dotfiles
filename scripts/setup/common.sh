@@ -15,7 +15,14 @@ need() {
   has "$1" || die "Missing $1. Run ./setup brew shell first, then retry this stage."
 }
 
+restore_terminal() {
+  if [ -n "$TERMINAL_STATE" ]; then
+    stty "$TERMINAL_STATE" </dev/tty || true
+  fi
+}
+
 confirm() {
+  restore_terminal
   local answer
   printf '%s [y/N] ' "$*" >&2
   IFS= read -r answer || return 1
