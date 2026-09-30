@@ -17,9 +17,6 @@ macos-titlebar-style = tabs
 background-opacity = 0.9
 background-blur-radius = 20
 
-# Autosuggestion color
-palette = 8=#7f849c
-
 # Cursor
 cursor-style = block
 cursor-style-blink = false
@@ -29,10 +26,7 @@ mouse-hide-while-typing = true
 
 # Clipboard
 copy-on-select = true
-clipboard-paste-protection = false
-
-# Scrollback
-scrollback-limit = 10000
+clipboard-paste-protection = true
 
 # macOS
 macos-option-as-alt = true

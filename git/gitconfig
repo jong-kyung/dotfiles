@@ -1,6 +1,3 @@
-[user]
-	name = JongKyung Lee
-	email = jongkyung0413@gmail.com
 [init]
 	defaultBranch = main
 [push]
@@ -14,3 +11,18 @@
 	prune = true
 [rebase]
 	autoStash = true
+[core]
+	pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+[merge]
+	conflictstyle = zdiff3
+# Enable signing in the local file only after preparing a secret key.
+[commit]
+	gpgsign = false
+[tag]
+	gpgsign = false
+[include]
+	path = ~/.gitconfig.local
