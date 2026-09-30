@@ -6,7 +6,7 @@ Run `./setup ai` from the repository root. See the [setup guide](../README.md) f
 
 - A copy of the shared [AGENTS.md](../AGENTS.md) at `~/.claude/CLAUDE.md`.
 - User-scoped Ponytail and Compound Engineering plugins.
-- Official gh and gh-stack, agent-browser, grilling, and grill-me skills. These replace the duplicate kit gh-cli integration after confirmation.
+- Official gh and gh-stack, agent-browser, grilling, and grill-me skills. Existing skills and plugins are preserved. Remove the duplicate `gh-cli@kit` integration yourself if it is installed.
 - `hooks/readonly-gh-api.ts`, registered for Bash PreToolUse events.
 - ccstatusline with model, token, usage, and context indicators.
 - Official CodeGraph MCP in `~/.claude.json`, without automatic tool approval.

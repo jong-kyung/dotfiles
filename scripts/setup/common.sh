@@ -82,17 +82,6 @@ copy_file() {
   printf 'Copied: %s\n' "$target"
 }
 
-retire() {
-  local target=$1
-  [ -e "$target" ] || [ -L "$target" ] || return 0
-
-  if ! confirm "Back up and remove conflicting resource $target?"; then
-    die "Resolve $target manually before retrying the ai stage."
-  fi
-  backup "$target"
-  rm -rf -- "$target"
-}
-
 merge_json() {
   local mode=$1 target=$2
   if $DRY_RUN; then

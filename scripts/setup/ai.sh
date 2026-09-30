@@ -46,10 +46,10 @@ install_skill() {
 }
 
 ai_stage() {
-  local file source before repo skill
+  local file repo skill
   if $DRY_RUN; then
     log 'ai: Pi, Claude Code, CodeGraph official MCP, ccstatusline; selected packages and official skills; no Figma/Jira'
-    log 'ai: confirm conflicting pi-mcp-adapter, custom codegraph and legacy gh-cli/notify resources before removal'
+    log 'ai: legacy files, packages and plugins are preserved'
   else
     need vp
     need node
@@ -74,31 +74,8 @@ ai_stage() {
     fi
     pi mcp --help >/dev/null 2>&1 || die 'Pi needs native MCP support. Upgrade Pi explicitly, then retry.'
 
-    # Approve transport changes and native MCP activation before removing the working adapter.
-    before=$PENDING
     merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
-    [ "$PENDING" -eq "$before" ] || die 'Native MCP configuration was declined; adapter removal was not attempted.'
     merge_json pi "$HOME/.pi/agent/settings.json"
-    [ "$PENDING" -eq "$before" ] || die 'Native MCP activation was declined; adapter removal was not attempted.'
-    source=$(pi_source npm:pi-mcp-adapter)
-    if [ -n "$source" ]; then
-      confirm 'Remove pi-mcp-adapter so Pi native MCP can run?' || die 'Pi native MCP is blocked by the adapter.'
-      backup "$HOME/.pi/agent/settings.json"
-      pi remove "$source"
-    fi
-
-    retire "$HOME/.pi/agent/extensions/codegraph.ts"
-    retire "$HOME/.pi/agent/skills/codegraph"
-    retire "$HOME/.claude/skills/codegraph"
-    retire "$HOME/.agents/skills/codegraph"
-    retire "$HOME/.pi/agent/skills/gh-cli"
-    retire "$HOME/.claude/skills/gh-cli"
-    retire "$HOME/.agents/skills/gh-cli"
-    if claude plugin list --json | json_has id gh-cli@kit user; then
-      confirm 'Remove gh-cli@kit in favor of the official gh skill?' || die 'Resolve the duplicate gh-cli plugin first.'
-      backup "$HOME/.claude/settings.json"
-      claude plugin uninstall gh-cli@kit --scope user
-    fi
 
     pi_package npm:pi-subagents "$HOME/.pi/agent/npm/node_modules/pi-subagents"
     pi_package npm:pi-ask-user "$HOME/.pi/agent/npm/node_modules/pi-ask-user"

@@ -7,7 +7,7 @@ Run `./setup ai` from the repository root. See the [setup guide](../README.md) f
 - A copy of the shared [AGENTS.md](../AGENTS.md).
 - Pi packages: pi-subagents, pi-ask-user, Ponytail, and Compound Engineering.
 - Skills: official gh and gh-stack, agent-browser, grilling, and grill-me.
-- Official CodeGraph MCP through Pi's built-in MCP support. The setup replaces the conflicting pi-mcp-adapter and custom CodeGraph resources only after confirmation.
+- Official CodeGraph MCP through Pi's built-in MCP support. Setup preserves existing custom CodeGraph resources.
 
 Existing model, provider, thinking, and theme preferences remain unchanged. On a new installation, choose your model after signing in.
 

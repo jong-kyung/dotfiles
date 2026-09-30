@@ -43,7 +43,7 @@ See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code gui
 
 ## Configuration and backups
 
-Edit files in this repository and rerun the relevant stage. Setup skips identical files and asks before backing up and replacing existing files or symlinks. Git and JSON changes preserve unrelated settings. Setup also asks before removing conflicting integrations or disabling unsupported legacy SSE servers.
+Edit files in this repository and rerun the relevant stage. Setup skips identical files and asks before backing up and replacing existing files or symlinks. Git and JSON changes preserve unrelated settings. The Pi MCP settings merge disables unsupported legacy SSE servers after confirmation. Setup does not delete legacy files, packages, or plugins.
 
 Backups live in `~/.local/state/dotfiles/backups/<run-id>/`, with paths relative to your home directory. Restore files from there when needed. Keep these private backups out of Git.
 
@@ -53,6 +53,7 @@ Setup uses standard home-directory paths. Custom `PI_CODING_AGENT_DIR`, `CLAUDE_
 
 ## Manual steps
 
+- Remove unwanted legacy integrations yourself, including custom CodeGraph extensions and skills, old `gh-cli` skills, and `gh-cli@kit`. Setup preserves them.
 - Configure your Git identity and signing with `git config --global`. Setup preserves those settings and existing includes; it does not create a separate identity file.
 - Prepare your signing key yourself. Restart an existing GPG agent with `gpgconf --kill gpg-agent` to apply pinentry changes.
 - Open a new terminal and restart Pi and Claude Code. Sign in and select your models.
