@@ -2,6 +2,7 @@
 # Apple Silicon macOS setup. Compatible with the system Bash 3.2.
 set -euo pipefail
 umask 077
+
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 DRY_RUN=false
 STAGES=()
@@ -9,271 +10,70 @@ PENDING=0
 WORK=
 BACKUPS=
 
+source "$ROOT/scripts/setup/common.sh"
+
 usage() {
   printf 'Usage: ./setup [--dry-run] [brew shell git ghostty ai ...]\n'
   printf 'No stages means all stages, in the order above. Updates are never automatic.\n'
 }
+
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) DRY_RUN=true ;;
-    -h|--help) usage; exit 0 ;;
-    brew|shell|git|ghostty|ai) STAGES+=("$arg") ;;
-    *) usage >&2; printf 'Unknown argument: %s\n' "$arg" >&2; exit 1 ;;
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    brew|shell|git|ghostty|ai)
+      STAGES+=("$arg")
+      ;;
+    *)
+      usage >&2
+      printf 'Unknown argument: %s\n' "$arg" >&2
+      exit 1
+      ;;
   esac
 done
-if [ ${#STAGES[@]} -eq 0 ]; then STAGES=(brew shell git ghostty ai); fi
 
-log() { printf '\n==> %s\n' "$*"; }
-die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
-has() { command -v "$1" >/dev/null 2>&1; }
-need() { has "$1" || die "Missing $1. Run ./setup brew shell first, then retry this stage."; }
-confirm() {
-  local answer
-  printf '%s [y/N] ' "$*" >&2
-  IFS= read -r answer || return 1
-  case "$answer" in y|Y|yes|YES) return 0;; *) return 1;; esac
-}
-pending() { printf 'Skipped: %s\n' "$*" >&2; PENDING=$((PENDING + 1)); }
-backup() {
-  local target=$1 saved
-  [ -e "$target" ] || [ -L "$target" ] || return 0
-  case "$target" in "$HOME"/*) ;; *) die "Refusing backup outside HOME: $target";; esac
-  if [ -z "$BACKUPS" ]; then
-    mkdir -p "$HOME/.local/state/dotfiles/backups"
-    BACKUPS=$(mktemp -d "$HOME/.local/state/dotfiles/backups/$(date +%Y%m%d-%H%M%S).XXXXXX")
-  fi
-  saved="$BACKUPS/${target#"$HOME"/}"
-  if [ ! -e "$saved" ] && [ ! -L "$saved" ]; then
-    mkdir -p "$(dirname "$saved")"
-    cp -pPR "$target" "$saved"
-  fi
-}
-copy_file() {
-  local source=$1 target=$2 temp
-  if $DRY_RUN; then printf 'Copy: %s -> %s\n' "${source#"$ROOT"/}" "$target"; return; fi
-  if [ -f "$target" ] && [ ! -L "$target" ] && cmp -s "$source" "$target"; then
-    printf 'Unchanged: %s\n' "$target"; return
-  fi
-  [ ! -d "$target" ] || die "Expected a file, found a directory: $target"
-  if [ -e "$target" ] || [ -L "$target" ]; then
-    if ! confirm "Back up and replace $target?"; then pending "$target"; return; fi
-    backup "$target"
-  fi
-  mkdir -p "$(dirname "$target")"
-  temp=$(mktemp "$target.tmp.XXXXXX")
-  if ! cp "$source" "$temp" || ! mv -f "$temp" "$target"; then
-    rm -f "$temp"; die "Could not copy $target (backup preserved)."
-  fi
-  printf 'Copied: %s\n' "$target"
-}
-retire() {
-  local target=$1
-  [ -e "$target" ] || [ -L "$target" ] || return 0
-  if ! confirm "Back up and remove conflicting resource $target?"; then
-    die "Resolve $target manually before retrying the ai stage."
-  fi
-  backup "$target"
-  rm -rf -- "$target"
-}
-merge_json() {
-  local mode=$1 target=$2
-  if $DRY_RUN; then printf 'Merge managed %s settings: %s\n' "$mode" "$target"; return; fi
-  node "$ROOT/scripts/config.mjs" "$mode" "$target" > "$WORK/config.json"
-  copy_file "$WORK/config.json" "$target"
-}
-installer() {
-  local url=$1 interpreter=$2
-  shift 2
-  log "Official installer: $url"
-  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$WORK/installer"
-  "$interpreter" "$WORK/installer" "$@"
-}
+if [ ${#STAGES[@]} -eq 0 ]; then
+  STAGES=(brew shell git ghostty ai)
+fi
 
-brew_stage() {
-  if $DRY_RUN; then log 'brew: Homebrew if missing, then Brewfile without upgrades'; return; fi
-  xcode-select -p >/dev/null 2>&1 || die 'Install Command Line Tools with xcode-select --install, then retry.'
-  if ! has brew; then installer https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh /bin/bash; fi
-  need brew
-  HOMEBREW_NO_AUTO_UPDATE=1 brew bundle install --file="$ROOT/Brewfile" --no-upgrade
-  brew list --versions
-}
-shell_stage() {
-  if $DRY_RUN; then
-    log 'shell: Vite+ Node/pnpm, Bun, Rust, Oh My Zsh, zsh-autosuggestions (missing only)'
-    copy_file "$ROOT/zsh/zshrc" "$HOME/.zshrc"
-    return
-  fi
-  need git
-  if ! has bun; then BUN_INSTALL="$HOME/.bun" SHELL=/bin/sh installer https://bun.sh/install /bin/bash; fi
-  if ! has vp; then
-    export VP_HOME="$HOME/.vite-plus" VP_SELF_SETUP_NO_MODIFY_PATH=1 VP_NODE_MANAGER=yes VP_NPM_MANAGER=yes VP_PNPM_MANAGER=yes VP_BUN_MANAGER=no
-    installer https://vite.plus /bin/bash
-  fi
-  need vp
-  # Keep existing runtimes. A missing environment gets the current Node LTS.
-  if ! vp env which node >/dev/null 2>&1; then vp env install lts; vp env default lts; fi
-  if ! vp env which pnpm >/dev/null 2>&1; then vp env install pnpm@latest; fi
-  if ! has rustup; then installer https://sh.rustup.rs /bin/sh -y --no-modify-path --default-toolchain stable; fi
-  if ! rustup show active-toolchain >/dev/null 2>&1; then rustup toolchain install stable; rustup default stable; fi
-  if [ ! -e "$HOME/.oh-my-zsh" ]; then
-    # Keep the installer's starter .zshrc in scratch space; copy_file owns the real one.
-    ZSH="$HOME/.oh-my-zsh" ZDOTDIR="$WORK/omz" installer https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh /bin/sh --unattended
-  fi
-  [ -f "$HOME/.oh-my-zsh/oh-my-zsh.sh" ] || die 'Existing ~/.oh-my-zsh is incomplete; resolve it before retrying.'
-  local plugin="$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-  if [ ! -e "$plugin" ]; then git clone --depth 1 https://github.com/zsh-users/zsh-autosuggestions.git "$plugin"; fi
-  [ -f "$plugin/zsh-autosuggestions.plugin.zsh" ] || die "Incomplete plugin: $plugin"
-  copy_file "$ROOT/zsh/zshrc" "$HOME/.zshrc"
-  vp --version; vp env current; bun --version; rustc --version
-}
-git_stage() {
-  if $DRY_RUN; then log 'git: merge shared preferences into ~/.gitconfig, preserve identity/signing/includes, and configure GPG pinentry'; return; fi
-  need git; need gpg; need pinentry-mac; need delta
-  git help --config | grep -Fx 'pull.autoStash' >/dev/null || die 'This Git lacks pull.autoStash. Install or explicitly upgrade Homebrew Git first.'
-  local entry key
-  if [ -f "$HOME/.gitconfig" ]; then cp "$HOME/.gitconfig" "$WORK/gitconfig"; else : > "$WORK/gitconfig"; fi
-  git config --file "$ROOT/git/gitconfig" --null --list > "$WORK/git-defaults"
-  while IFS= read -r -d '' entry; do
-    key=${entry%%$'\n'*}
-    git config --file "$WORK/gitconfig" --replace-all "$key" "${entry#*$'\n'}"
-  done < "$WORK/git-defaults"
-  copy_file "$WORK/gitconfig" "$HOME/.gitconfig"
-  mkdir -p "$HOME/.gnupg"; chmod 700 "$HOME/.gnupg"
-  local agent="$HOME/.gnupg/gpg-agent.conf"
-  if [ -f "$agent" ]; then grep -vE '^[[:space:]]*pinentry-program([[:space:]]|$)' "$agent" > "$WORK/gpg-agent.conf" || [ "$?" -eq 1 ]; fi
-  printf 'pinentry-program %s\n' "$(command -v pinentry-mac)" >> "$WORK/gpg-agent.conf"
-  copy_file "$WORK/gpg-agent.conf" "$agent"
-}
-ghostty_stage() {
-  copy_file "$ROOT/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
-}
+if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
+  die 'Only Apple Silicon macOS is supported.'
+fi
 
-pi_source() {
-  node -e '
-    const fs = require("node:fs"); const file = process.env.HOME + "/.pi/agent/settings.json";
-    const entries = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")).packages ?? [] : [];
-    for (const entry of entries) { const s = typeof entry === "string" ? entry : entry.source;
-      if (s === process.argv[1] || s?.startsWith(process.argv[1] + "@")) { console.log(s); break; }
-    }' "$1"
-}
-pi_package() {
-  local source=$1 installed=$2
-  if [ -n "$(pi_source "$source")" ] && [ -f "$installed/package.json" ]; then
-    printf 'Installed Pi package: %s\n' "$source"
-  else
-    backup "$HOME/.pi/agent/settings.json"
-    pi install "$source"
-  fi
-}
-claude_plugin() {
-  local repo=$1 marketplace=$2 plugin=$3
-  if ! claude plugin marketplace list --json | node -e '
-    let s=""; process.stdin.on("data",x=>s+=x).on("end",()=>process.exit(JSON.parse(s).some(x=>x.name===process.argv[1])?0:1));' "$marketplace"; then
-    backup "$HOME/.claude/settings.json"
-    claude plugin marketplace add "$repo"
-  fi
-  if ! claude plugin list --json | node -e '
-    let s=""; process.stdin.on("data",x=>s+=x).on("end",()=>process.exit(JSON.parse(s).some(x=>x.id===process.argv[1]&&x.scope==="user")?0:1));' "$plugin"; then
-    backup "$HOME/.claude/settings.json"
-    claude plugin install "$plugin" --scope user
-  fi
-}
-install_skill() {
-  local repo=$1 skill=$2 name=$3 agent dest
-  for agent in pi claude-code; do
-    if [ "$agent" = pi ]; then dest="$HOME/.pi/agent/skills/$name"; else dest="$HOME/.claude/skills/$name"; fi
-    if [ -f "$dest/SKILL.md" ]; then
-      printf 'Existing skill preserved: %s (use gh skill update separately)\n' "$dest"
-    else
-      gh skill install "$repo" "$skill" --agent "$agent" --scope user
-    fi
-  done
-}
-ai_stage() {
-  local file source before
-  if $DRY_RUN; then
-    log 'ai: Pi, Claude Code, CodeGraph official MCP, ccstatusline; selected packages and official skills; no Figma/Jira'
-    log 'ai: confirm conflicting pi-mcp-adapter, custom codegraph and legacy gh-cli/notify resources before removal'
-  else
-    need vp; need node; need bun; need gh; need agent-browser
-    gh auth status >/dev/null 2>&1 || die 'Run gh auth login yourself, then rerun ./setup ai (official skill installation requires GitHub access).'
-    gh skill install --help >/dev/null 2>&1 || die 'Your gh lacks skill install. Upgrade gh explicitly, then retry.'
-    if ! has pi; then vp install -g @earendil-works/pi-coding-agent --ignore-scripts; fi
-    if ! has claude; then installer https://claude.ai/install.sh /bin/bash stable; fi
-    if ! has codegraph; then installer https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh /bin/sh; fi
-    if ! has ccstatusline; then bun install -g ccstatusline; fi
-    pi mcp --help >/dev/null 2>&1 || die 'Pi needs native MCP support. Upgrade Pi explicitly, then retry.'
-    # Approve transport changes and native MCP activation before removing the working adapter.
-    before=$PENDING
-    merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
-    [ "$PENDING" -eq "$before" ] || die 'Native MCP configuration was declined; adapter removal was not attempted.'
-    merge_json pi "$HOME/.pi/agent/settings.json"
-    [ "$PENDING" -eq "$before" ] || die 'Native MCP activation was declined; adapter removal was not attempted.'
-    source=$(pi_source npm:pi-mcp-adapter)
-    if [ -n "$source" ]; then
-      confirm 'Remove pi-mcp-adapter so Pi native MCP can run?' || die 'Pi native MCP is blocked by the adapter.'
-      backup "$HOME/.pi/agent/settings.json"; pi remove "$source"
-    fi
-    retire "$HOME/.pi/agent/extensions/codegraph.ts"
-    retire "$HOME/.pi/agent/skills/codegraph"
-    retire "$HOME/.claude/skills/codegraph"
-    retire "$HOME/.agents/skills/codegraph"
-    retire "$HOME/.pi/agent/skills/gh-cli"
-    retire "$HOME/.claude/skills/gh-cli"
-    retire "$HOME/.agents/skills/gh-cli"
-    if claude plugin list --json | node -e '
-      let s=""; process.stdin.on("data",x=>s+=x).on("end",()=>process.exit(JSON.parse(s).some(x=>x.id==="gh-cli@kit"&&x.scope==="user")?0:1));'; then
-      confirm 'Remove gh-cli@kit in favor of the official gh skill?' || die 'Resolve the duplicate gh-cli plugin first.'
-      backup "$HOME/.claude/settings.json"
-      claude plugin uninstall gh-cli@kit --scope user
-    fi
-    pi_package npm:pi-subagents "$HOME/.pi/agent/npm/node_modules/pi-subagents"
-    pi_package npm:pi-ask-user "$HOME/.pi/agent/npm/node_modules/pi-ask-user"
-    pi_package git:github.com/DietrichGebert/ponytail "$HOME/.pi/agent/git/github.com/DietrichGebert/ponytail"
-    pi_package git:github.com/EveryInc/compound-engineering-plugin "$HOME/.pi/agent/git/github.com/EveryInc/compound-engineering-plugin"
-    claude_plugin DietrichGebert/ponytail ponytail ponytail@ponytail
-    claude_plugin EveryInc/compound-engineering-plugin compound-engineering-plugin compound-engineering@compound-engineering-plugin
-    if ! gh extension list | grep -F 'github/gh-stack' >/dev/null; then gh extension install github/gh-stack; fi
-    install_skill cli/cli skills/gh gh
-    install_skill github/gh-stack skills/gh-stack gh-stack
-    install_skill vercel-labs/agent-browser skills/agent-browser agent-browser
-    install_skill mattpocock/skills skills/productivity/grilling grilling
-    install_skill mattpocock/skills skills/productivity/grill-me grill-me
-    agent-browser install
-    # Herdr owns this generated integration; do not vendor its files here.
-    if [ ! -f "$HOME/.pi/agent/extensions/herdr-agent-state.ts" ]; then need herdr; herdr integration install pi; fi
-  fi
-  copy_file "$ROOT/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
-  copy_file "$ROOT/AGENTS.md" "$HOME/.claude/CLAUDE.md"
-  for file in context files loop notify readonly-gh-api session-breakdown; do
-    copy_file "$ROOT/pi/extensions/$file.ts" "$HOME/.pi/agent/extensions/$file.ts"
-  done
-  copy_file "$ROOT/claude/hooks/readonly-gh-api.ts" "$HOME/.claude/hooks/readonly-gh-api.ts"
-  copy_file "$ROOT/claude/ccstatusline/settings.json" "$HOME/.config/ccstatusline/settings.json"
-  if $DRY_RUN; then
-    merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
-    merge_json pi "$HOME/.pi/agent/settings.json"
-  fi
-  merge_json claude-mcp "$HOME/.claude.json"
-  merge_json claude "$HOME/.claude/settings.json"
-  if ! $DRY_RUN; then
-    pi --version; claude --version; codegraph --version; pi list
-    printf 'Restart Pi/Claude. Sign in manually. Run pi mcp list and Claude /mcp to verify CodeGraph.\n'
-    printf 'Project indexes are opt-in: run codegraph init in each chosen project yourself.\n'
-  fi
-}
-
-[ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ] || die 'Only Apple Silicon macOS is supported.'
 if ! $DRY_RUN; then
   [ "$(id -u)" != 0 ] || die 'Run as your own user, not with sudo.'
   [ "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" = "$HOME/.pi/agent" ] || die 'Custom PI_CODING_AGENT_DIR is not supported.'
   [ "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" = "$HOME/.claude" ] || die 'Custom CLAUDE_CONFIG_DIR is not supported.'
   [ "${GNUPGHOME:-$HOME/.gnupg}" = "$HOME/.gnupg" ] || die 'Custom GNUPGHOME is not supported.'
+
   WORK=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles.XXXXXX")
   trap 'rm -rf "$WORK"' EXIT
 fi
+
 export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
-for stage in "${STAGES[@]}"; do log "$stage"; "${stage}_stage"; done
-if [ -n "$BACKUPS" ]; then printf '\nBackups: %s\n' "$BACKUPS"; fi
-if [ "$PENDING" -gt 0 ]; then printf '\n%d change(s) declined. Resolve them and rerun the stage.\n' "$PENDING"; exit 2; fi
-if $DRY_RUN; then printf '\nPreview only. Nothing changed.\n'; else printf '\nSetup complete. Open a new terminal to load shell changes.\n'; fi
+
+for stage in "${STAGES[@]}"; do
+  log "$stage"
+  source "$ROOT/scripts/setup/$stage.sh"
+  "${stage}_stage"
+done
+
+if [ -n "$BACKUPS" ]; then
+  printf '\nBackups: %s\n' "$BACKUPS"
+fi
+
+if [ "$PENDING" -gt 0 ]; then
+  printf '\n%d change(s) declined. Resolve them and rerun the stage.\n' "$PENDING"
+  exit 2
+fi
+
+if $DRY_RUN; then
+  printf '\nPreview only. Nothing changed.\n'
+else
+  printf '\nSetup complete. Open a new terminal to load shell changes.\n'
+fi

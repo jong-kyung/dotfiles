@@ -35,6 +35,8 @@ Sign in to Pi and Claude Code yourself after installation. Setup does not copy c
 
 With no arguments, setup runs all stages in the order above. Run `brew` and `shell` before other stages on a new Mac. Rerun a stage after fixing an installation error. Exit code `2` means you declined configuration changes.
 
+`setup` handles arguments and dispatches stages from `scripts/setup/`. Shared confirmation, backup, and copy helpers live in `scripts/setup/common.sh`.
+
 See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code guide](claude/README.md) for the selected tools and settings. Setup leaves macOS system preferences alone.
 
 ## Configuration and backups
@@ -61,7 +63,9 @@ Setup uses official installers for Vite+, Bun, Rust, Oh My Zsh, Claude Code, and
 ## Local checks
 
 ```sh
-/bin/bash -n setup
+for file in setup scripts/setup/*.sh; do
+  /bin/bash -n "$file"
+done
 zsh -n zsh/zshrc
 node --check scripts/config.mjs
 ruby -c Brewfile
