@@ -31,7 +31,8 @@ claude_plugin() {
 }
 
 install_skill() {
-  local repo=$1 skill=$2 name=$3 pair dest
+  local repo=$1 skill=$2 name pair dest
+  name=${skill##*/}
   for pair in "pi:$HOME/.pi/agent" "claude-code:$HOME/.claude"; do
     dest="${pair#*:}/skills/$name"
     if [ -f "$dest/SKILL.md" ]; then
@@ -43,7 +44,7 @@ install_skill() {
 }
 
 ai_stage() {
-  local file source before
+  local file source before repo skill
   if $DRY_RUN; then
     log 'ai: Pi, Claude Code, CodeGraph official MCP, ccstatusline; selected packages and official skills; no Figma/Jira'
     log 'ai: confirm conflicting pi-mcp-adapter, custom codegraph and legacy gh-cli/notify resources before removal'
@@ -53,6 +54,7 @@ ai_stage() {
     need bun
     need gh
     need agent-browser
+    node "$ROOT/scripts/setup-query.mjs" skills "$ROOT/skills.json" > "$WORK/skills"
     gh auth status >/dev/null 2>&1 || die 'Run gh auth login yourself, then rerun ./setup ai (official skill installation requires GitHub access).'
     gh skill install --help >/dev/null 2>&1 || die 'Your gh lacks skill install. Upgrade gh explicitly, then retry.'
 
@@ -106,11 +108,9 @@ ai_stage() {
     if ! gh extension list | grep -F 'github/gh-stack' >/dev/null; then
       gh extension install github/gh-stack
     fi
-    install_skill cli/cli skills/gh gh
-    install_skill github/gh-stack skills/gh-stack gh-stack
-    install_skill vercel-labs/agent-browser skills/agent-browser agent-browser
-    install_skill mattpocock/skills skills/productivity/grilling grilling
-    install_skill mattpocock/skills skills/productivity/grill-me grill-me
+    while IFS=$'\t' read -r repo skill; do
+      install_skill "$repo" "$skill"
+    done < "$WORK/skills"
     agent-browser install
 
     # Herdr owns this generated integration; do not vendor its files here.

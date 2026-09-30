@@ -39,6 +39,8 @@ With no arguments, setup runs all stages in the order above. Run `brew` and `she
 
 See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code guide](claude/README.md) for the selected tools and settings. Setup leaves macOS system preferences alone.
 
+[skills.json](skills.json) lists directly installed skills by repository and skill directory path. `./setup ai` installs missing entries for both Pi and Claude Code with `gh skill install`. Existing skills are preserved, and removing an entry does not uninstall it. Pi packages and Claude plugins are managed separately.
+
 ## Configuration and backups
 
 Edit files in this repository and rerun the relevant stage. Setup skips identical files and asks before backing up and replacing existing files or symlinks. Git and JSON changes preserve unrelated settings. Setup also asks before removing conflicting integrations or disabling unsupported legacy SSE servers.

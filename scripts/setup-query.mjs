@@ -16,6 +16,9 @@ if (mode === 'pi-source') {
   const [key, value, scope] = args;
   const items = JSON.parse(readFileSync(0, 'utf8'));
   process.exitCode = items.some(item => item[key] === value && (!scope || item.scope === scope)) ? 0 : 1;
+} else if (mode === 'skills') {
+  const skills = JSON.parse(readFileSync(args[0], 'utf8'));
+  process.stdout.write(skills.map(({ repo, skill }) => `${repo}\t${skill}\n`).join(''));
 } else {
   throw new Error(`Unknown query: ${mode}`);
 }

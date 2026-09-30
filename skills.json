@@ -1,0 +1,7 @@
+[
+  { "repo": "cli/cli", "skill": "skills/gh" },
+  { "repo": "github/gh-stack", "skill": "skills/gh-stack" },
+  { "repo": "vercel-labs/agent-browser", "skill": "skills/agent-browser" },
+  { "repo": "mattpocock/skills", "skill": "skills/productivity/grilling" },
+  { "repo": "mattpocock/skills", "skill": "skills/productivity/grill-me" }
+]
