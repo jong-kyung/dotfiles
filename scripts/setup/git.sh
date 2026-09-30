@@ -8,20 +8,13 @@ git_stage() {
   need gpg
   need pinentry-mac
   need delta
-  git help --config | grep -Fx 'pull.autoStash' >/dev/null || die 'This Git lacks pull.autoStash. Install or explicitly upgrade Homebrew Git first.'
 
   local entry key
-  if [ -f "$HOME/.gitconfig" ]; then
-    cp "$HOME/.gitconfig" "$WORK/gitconfig"
-  else
-    : > "$WORK/gitconfig"
-  fi
-
-  git config --file "$ROOT/git/gitconfig" --null --list > "$WORK/git-defaults"
-  while IFS= read -r -d '' entry; do
+  [ ! -f "$HOME/.gitconfig" ] || cp "$HOME/.gitconfig" "$WORK/gitconfig"
+  git config --file "$ROOT/git/gitconfig" --null --list | while IFS= read -r -d '' entry; do
     key=${entry%%$'\n'*}
     git config --file "$WORK/gitconfig" --replace-all "$key" "${entry#*$'\n'}"
-  done < "$WORK/git-defaults"
+  done
   copy_file "$WORK/gitconfig" "$HOME/.gitconfig"
 
   mkdir -p "$HOME/.gnupg"
