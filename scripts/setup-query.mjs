@@ -16,6 +16,13 @@ if (mode === 'pi-source') {
   const [key, value, scope] = args;
   const items = JSON.parse(readFileSync(0, 'utf8'));
   process.exitCode = items.some(item => item[key] === value && (!scope || item.scope === scope)) ? 0 : 1;
+} else if (mode === 'claude-marketplace') {
+  const [name, repo] = args;
+  const marketplace = JSON.parse(readFileSync(0, 'utf8')).find(item => item.name === name);
+  if (marketplace && (marketplace.source !== 'github' || marketplace.repo !== repo)) {
+    throw new Error(`Marketplace ${name} must use GitHub repository ${repo}`);
+  }
+  console.log(marketplace ? 'present' : 'missing');
 } else if (mode === 'skills') {
   const skills = JSON.parse(readFileSync(args[0], 'utf8'));
   process.stdout.write(skills.map(({ repo, skill }) => `${repo}\t${skill}\n`).join(''));

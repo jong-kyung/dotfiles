@@ -18,8 +18,10 @@ json_has() {
 }
 
 claude_plugin() {
-  local repo=$1 marketplace=$2 plugin=$3
-  if ! claude plugin marketplace list --json | json_has name "$marketplace"; then
+  local repo=$1 marketplace=$2 plugin=$3 state
+  state=$(claude plugin marketplace list --json | node "$ROOT/scripts/setup-query.mjs" claude-marketplace "$marketplace" "$repo") \
+    || die "Cannot verify marketplace $marketplace. Resolve its source before retrying."
+  if [ "$state" = missing ]; then
     backup "$HOME/.claude/settings.json"
     claude plugin marketplace add "$repo"
   fi
