@@ -1,6 +1,5 @@
 // Render a candidate configuration. setup owns confirmation, backups and writes.
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 
 const [mode, file] = process.argv.slice(2);
 function object(value, label) {
@@ -11,18 +10,13 @@ try {
   const config = existsSync(file) ? object(JSON.parse(readFileSync(file, 'utf8')), file) : {};
   if (mode === 'claude') {
     const hooks = object(config.hooks ?? {}, 'hooks');
-    const owned = new Set(['notify.ts', 'readonly-gh-api.ts'].flatMap(name => [
-      `bun "$HOME/.claude/hooks/${name}"`,
-      `bun "${homedir()}/.claude/hooks/${name}"`,
-      `bun ${homedir()}/.claude/hooks/${name}`,
-    ]));
+    const owned = new Set(['notify.ts', 'readonly-gh-api.ts'].map(name => `bun "$HOME/.claude/hooks/${name}"`));
     // Remove only our exact legacy commands, never another app's hooks or matchers.
     for (const [event, groups] of Object.entries(hooks)) {
-      if (!Array.isArray(groups)) throw new Error(`hooks.${event} must be an array`);
-      hooks[event] = groups.map(group => {
-        if (!Array.isArray(group.hooks)) throw new Error(`hooks.${event} entry must contain hooks`);
-        return { ...group, hooks: group.hooks.filter(hook => !owned.has(hook.command)) };
-      }).filter(group => group.hooks.length);
+      // A malformed shape throws here and lands in the catch below.
+      hooks[event] = groups
+        .map(group => ({ ...group, hooks: group.hooks.filter(hook => !owned.has(hook.command)) }))
+        .filter(group => group.hooks.length);
       if (!hooks[event].length) delete hooks[event];
     }
     (hooks.PreToolUse ??= []).push({ matcher: 'Bash', hooks: [
@@ -33,10 +27,7 @@ try {
     config.attribution = { ...object(config.attribution ?? {}, 'attribution'), commit: '', pr: '', sessionUrl: false };
     config.remoteControlAtStartup = false;
   } else if (mode === 'pi') {
-    if (config.extensions !== undefined) {
-      if (!Array.isArray(config.extensions)) throw new Error('extensions must be an array');
-      config.extensions = config.extensions.filter(value => value !== '-builtin:mcp');
-    }
+    if (config.extensions !== undefined) config.extensions = config.extensions.filter(value => value !== '-builtin:mcp');
   } else if (mode === 'pi-mcp' || mode === 'claude-mcp') {
     const servers = object(config.mcpServers ?? {}, 'mcpServers');
     if (mode === 'pi-mcp') {
