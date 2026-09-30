@@ -1,15 +1,5 @@
 pi_source() {
-  node -e '
-    const fs = require("node:fs");
-    const file = process.env.HOME + "/.pi/agent/settings.json";
-    const entries = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")).packages ?? [] : [];
-    for (const entry of entries) {
-      const source = typeof entry === "string" ? entry : entry.source;
-      if (source === process.argv[1] || source?.startsWith(process.argv[1] + "@")) {
-        console.log(source);
-        break;
-      }
-    }' "$1"
+  node "$ROOT/scripts/setup-query.mjs" pi-source "$1"
 }
 
 pi_package() {
@@ -24,10 +14,7 @@ pi_package() {
 
 # Succeeds when the JSON array on stdin has an item whose key equals value, optionally in the given scope.
 json_has() {
-  node -e '
-    const [key, value, scope] = process.argv.slice(1);
-    const items = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
-    process.exit(items.some(item => item[key] === value && (!scope || item.scope === scope)) ? 0 : 1);' "$@"
+  node "$ROOT/scripts/setup-query.mjs" json-has "$@"
 }
 
 claude_plugin() {
