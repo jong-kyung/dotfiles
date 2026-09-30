@@ -47,60 +47,6 @@ const TOD_BUCKETS: { key: TodKey; label: string; from: number; to: number }[] = 
 	{ key: "night", label: "Night (22–23)", from: 22, to: 23 },
 ];
 
-// Keep this local instead of importing private pi-tui internals;
-// private package paths can drift independently of pi's public extension API.
-const ANSI_CODE_PATTERN = /^\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/u;
-const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-
-function extractAnsiCode(text: string, index: number): { code: string; length: number } | undefined {
-	if (text.charCodeAt(index) !== 0x1b) return undefined;
-	const match = ANSI_CODE_PATTERN.exec(text.slice(index));
-	if (!match) return undefined;
-	return { code: match[0], length: match[0].length };
-}
-
-function sliceByColumn(line: string, startCol: number, length: number, strict = false): string {
-	if (length <= 0) return "";
-	const endCol = startCol + length;
-	let result = "";
-	let currentCol = 0;
-	let i = 0;
-	let pendingAnsi = "";
-
-	while (i < line.length) {
-		const ansi = extractAnsiCode(line, i);
-		if (ansi) {
-			if (currentCol >= startCol && currentCol < endCol) result += ansi.code;
-			else if (currentCol < startCol) pendingAnsi += ansi.code;
-			i += ansi.length;
-			continue;
-		}
-
-		let textEnd = i;
-		while (textEnd < line.length && !extractAnsiCode(line, textEnd)) textEnd++;
-
-		for (const { segment } of graphemeSegmenter.segment(line.slice(i, textEnd))) {
-			const segmentWidth = visibleWidth(segment);
-			const inRange = currentCol >= startCol && currentCol < endCol;
-			const fits = !strict || currentCol + segmentWidth <= endCol;
-			if (inRange && fits) {
-				if (pendingAnsi) {
-					result += pendingAnsi;
-					pendingAnsi = "";
-				}
-				result += segment;
-			}
-			currentCol += segmentWidth;
-			if (currentCol >= endCol) break;
-		}
-
-		i = textEnd;
-		if (currentCol >= endCol) break;
-	}
-
-	return result;
-}
-
 function todBucketForHour(hour: number): TodKey {
 	for (const b of TOD_BUCKETS) {
 		if (hour >= b.from && hour <= b.to) return b.key;
@@ -113,7 +59,6 @@ function todBucketLabel(key: TodKey): string {
 }
 
 interface ParsedSession {
-	filePath: string;
 	startedAt: Date;
 	dayKeyLocal: string; // YYYY-MM-DD (local)
 	cwd: CwdKey | null;
@@ -134,19 +79,15 @@ interface DayAgg {
 	sessions: number;
 	messages: number;
 	tokens: number;
-	totalCost: number;
-	costByModel: Map<ModelKey, number>;
 	sessionsByModel: Map<ModelKey, number>;
 	messagesByModel: Map<ModelKey, number>;
 	tokensByModel: Map<ModelKey, number>;
 	sessionsByCwd: Map<CwdKey, number>;
 	messagesByCwd: Map<CwdKey, number>;
 	tokensByCwd: Map<CwdKey, number>;
-	costByCwd: Map<CwdKey, number>;
 	sessionsByTod: Map<TodKey, number>;
 	messagesByTod: Map<TodKey, number>;
 	tokensByTod: Map<TodKey, number>;
-	costByTod: Map<TodKey, number>;
 }
 
 interface RangeAgg {
@@ -181,7 +122,6 @@ interface RGB {
 }
 
 interface BreakdownData {
-	generatedAt: Date;
 	ranges: Map<number, RangeAgg>;
 	palette: {
 		modelColors: Map<ModelKey, RGB>;
@@ -215,7 +155,6 @@ interface BreakdownProgressState {
 	foundFiles: number;
 	parsedFiles: number;
 	totalFiles: number;
-	currentFile?: string;
 }
 
 function setBorderedLoaderMessage(loader: BorderedLoader, message: string) {
@@ -270,10 +209,6 @@ function weightedMix(colors: Array<{ color: RGB; weight: number }>): RGB {
 	}
 	if (total <= 0) return EMPTY_CELL_BG;
 	return { r: Math.round(r / total), g: Math.round(g / total), b: Math.round(b / total) };
-}
-
-function ansiBg(rgb: RGB, text: string): string {
-	return `\x1b[48;2;${rgb.r};${rgb.g};${rgb.b}m${text}\x1b[0m`;
 }
 
 function ansiFg(rgb: RGB, text: string): string {
@@ -331,16 +266,6 @@ function abbreviatePath(p: string, maxWidth = 40): string {
 		if (candidate.length <= maxWidth || keep === 1) return candidate;
 	}
 	return display;
-}
-
-function padRight(s: string, n: number): string {
-	const delta = n - s.length;
-	return delta > 0 ? s + " ".repeat(delta) : s;
-}
-
-function padLeft(s: string, n: number): string {
-	const delta = n - s.length;
-	return delta > 0 ? " ".repeat(delta) + s : s;
 }
 
 function toLocalDayKey(d: Date): string {
@@ -610,7 +535,6 @@ async function parseSessionFile(filePath: string, signal?: AbortSignal): Promise
 	const dow = DOW_NAMES[mondayIndex(startedAt)];
 	const tod = todBucketForHour(startedAt.getHours());
 	return {
-		filePath,
 		startedAt,
 		dayKeyLocal,
 		cwd,
@@ -641,19 +565,15 @@ function buildRangeAgg(days: number, now: Date): RangeAgg {
 			sessions: 0,
 			messages: 0,
 			tokens: 0,
-			totalCost: 0,
-			costByModel: new Map(),
 			sessionsByModel: new Map(),
 			messagesByModel: new Map(),
 			tokensByModel: new Map(),
 			sessionsByCwd: new Map(),
 			messagesByCwd: new Map(),
 			tokensByCwd: new Map(),
-			costByCwd: new Map(),
 			sessionsByTod: new Map(),
 			messagesByTod: new Map(),
 			tokensByTod: new Map(),
-			costByTod: new Map(),
 		};
 		outDays.push(day);
 		dayByKey.set(dayKeyLocal, day);
@@ -696,7 +616,6 @@ function addSessionToRange(range: RangeAgg, session: ParsedSession): void {
 	day.sessions += 1;
 	day.messages += session.messages;
 	day.tokens += session.tokens;
-	day.totalCost += session.totalCost;
 
 	// Sessions-per-model (presence)
 	for (const mk of session.modelsUsed) {
@@ -718,7 +637,6 @@ function addSessionToRange(range: RangeAgg, session: ParsedSession): void {
 
 	// Cost-per-model
 	for (const [mk, cost] of session.costByModel.entries()) {
-		day.costByModel.set(mk, (day.costByModel.get(mk) ?? 0) + cost);
 		range.modelCost.set(mk, (range.modelCost.get(mk) ?? 0) + cost);
 	}
 
@@ -731,7 +649,6 @@ function addSessionToRange(range: RangeAgg, session: ParsedSession): void {
 		range.cwdMessages.set(cwd, (range.cwdMessages.get(cwd) ?? 0) + session.messages);
 		day.tokensByCwd.set(cwd, (day.tokensByCwd.get(cwd) ?? 0) + session.tokens);
 		range.cwdTokens.set(cwd, (range.cwdTokens.get(cwd) ?? 0) + session.tokens);
-		day.costByCwd.set(cwd, (day.costByCwd.get(cwd) ?? 0) + session.totalCost);
 		range.cwdCost.set(cwd, (range.cwdCost.get(cwd) ?? 0) + session.totalCost);
 	}
 
@@ -747,7 +664,6 @@ function addSessionToRange(range: RangeAgg, session: ParsedSession): void {
 	day.sessionsByTod.set(tod, (day.sessionsByTod.get(tod) ?? 0) + 1);
 	day.messagesByTod.set(tod, (day.messagesByTod.get(tod) ?? 0) + session.messages);
 	day.tokensByTod.set(tod, (day.tokensByTod.get(tod) ?? 0) + session.tokens);
-	day.costByTod.set(tod, (day.costByTod.get(tod) ?? 0) + session.totalCost);
 	range.todSessions.set(tod, (range.todSessions.get(tod) ?? 0) + 1);
 	range.todMessages.set(tod, (range.todMessages.get(tod) ?? 0) + session.messages);
 	range.todTokens.set(tod, (range.todTokens.get(tod) ?? 0) + session.tokens);
@@ -974,7 +890,7 @@ function renderGraphLines(
 	const lines: string[] = [];
 	for (let row = 0; row < 7; row++) {
 		const label = labelByRow.get(row);
-		let line = label ? padRight(label, 3) + " " : "    ";
+		let line = label ? label.padEnd(3) + " " : "    ";
 
 		for (let w = 0; w < weeks; w++) {
 			const cellDate = addDaysLocal(gridStart, w * 7 + row);
@@ -1019,51 +935,6 @@ function displayModelName(modelKey: string): string {
 	return idx === -1 ? modelKey : modelKey.slice(idx + 1);
 }
 
-function renderLegendItems(modelColors: Map<ModelKey, RGB>, orderedModels: ModelKey[], otherColor: RGB): string[] {
-	const items: string[] = [];
-	for (const mk of orderedModels) {
-		const c = modelColors.get(mk);
-		if (!c) continue;
-		items.push(`${ansiFg(c, "█")} ${displayModelName(mk)}`);
-	}
-	items.push(`${ansiFg(otherColor, "█")} other`);
-	return items;
-}
-
-function fitRight(text: string, width: number): string {
-	if (width <= 0) return "";
-	let w = visibleWidth(text);
-	let t = text;
-	if (w > width) {
-		t = sliceByColumn(t, w - width, width, true);
-		w = visibleWidth(t);
-	}
-	return " ".repeat(Math.max(0, width - w)) + t;
-}
-
-function renderLegendBlock(leftLabel: string, items: string[], width: number): string[] {
-	if (width <= 0) return [];
-	if (items.length === 0) return [truncateToWidth(leftLabel, width)];
-
-	const lines: string[] = [];
-	// First line: label on left, first item right-aligned into remaining space.
-	const leftW = visibleWidth(leftLabel);
-	if (leftW >= width) {
-		lines.push(truncateToWidth(leftLabel, width));
-		// Put all items on their own lines right-aligned.
-		for (const it of items) lines.push(fitRight(it, width));
-		return lines;
-	}
-
-	const remaining = Math.max(0, width - leftW);
-	lines.push(leftLabel + fitRight(items[0], remaining));
-
-	for (let i = 1; i < items.length; i++) {
-		lines.push(fitRight(items[i], width));
-	}
-	return lines;
-}
-
 function renderModelTable(range: RangeAgg, mode: MeasurementMode, maxRows = 8): string[] {
 	// Keep this relatively narrow: model + selected metric + cost + share.
 	const metric = graphMetricForRange(range, mode);
@@ -1091,7 +962,7 @@ function renderModelTable(range: RangeAgg, mode: MeasurementMode, maxRows = 8): 
 	const modelWidth = Math.min(52, Math.max("model".length, ...rows.map((r) => r.key.length)));
 
 	const lines: string[] = [];
-	lines.push(`${padRight("model", modelWidth)}  ${padLeft(label, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`);
+	lines.push(`${"model".padEnd(modelWidth)}  ${label.padStart(valueWidth)}  ${"cost".padStart(10)}  ${"share".padStart(6)}`);
 	lines.push(`${"-".repeat(modelWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`);
 
 	for (const r of rows) {
@@ -1099,7 +970,7 @@ function renderModelTable(range: RangeAgg, mode: MeasurementMode, maxRows = 8): 
 		const cost = range.modelCost.get(r.key) ?? 0;
 		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
 		lines.push(
-			`${padRight(r.key.slice(0, modelWidth), modelWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
+			`${r.key.slice(0, modelWidth).padEnd(modelWidth)}  ${formatCount(value).padStart(valueWidth)}  ${formatUsd(cost).padStart(10)}  ${share.padStart(6)}`,
 		);
 	}
 
@@ -1137,7 +1008,7 @@ function renderCwdTable(range: RangeAgg, mode: MeasurementMode, maxRows = 8): st
 	const cwdWidth = Math.min(42, Math.max("directory".length, ...displayPaths.map((p) => p.length)));
 
 	const lines: string[] = [];
-	lines.push(`${padRight("directory", cwdWidth)}  ${padLeft(label, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`);
+	lines.push(`${"directory".padEnd(cwdWidth)}  ${label.padStart(valueWidth)}  ${"cost".padStart(10)}  ${"share".padStart(6)}`);
 	lines.push(`${"-".repeat(cwdWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`);
 
 	for (let i = 0; i < rows.length; i++) {
@@ -1146,7 +1017,7 @@ function renderCwdTable(range: RangeAgg, mode: MeasurementMode, maxRows = 8): st
 		const cost = range.cwdCost.get(r.key) ?? 0;
 		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
 		lines.push(
-			`${padRight(displayPaths[i].slice(0, cwdWidth), cwdWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
+			`${displayPaths[i].slice(0, cwdWidth).padEnd(cwdWidth)}  ${formatCount(value).padStart(valueWidth)}  ${formatUsd(cost).padStart(10)}  ${share.padStart(6)}`,
 		);
 	}
 
@@ -1200,10 +1071,10 @@ function renderDowDistributionLines(
 		const color = dowColors.get(dow) ?? fallbackColor;
 		const filledBar = filled > 0 ? ansiFg(color, "█".repeat(filled)) : "";
 		const emptyBar = empty > 0 ? ansiFg(EMPTY_CELL_BG, "█".repeat(empty)) : "";
-		const pct = padLeft(`${Math.round(share * 100)}%`, pctWidth);
+		const pct = `${Math.round(share * 100)}%`.padStart(pctWidth);
 
-		let line = `${padRight(dow, dayWidth)} ${filledBar}${emptyBar} ${pct}`;
-		if (showValue) line += ` ${padLeft(formatCount(value), valueWidth)}`;
+		let line = `${dow.padEnd(dayWidth)} ${filledBar}${emptyBar} ${pct}`;
+		if (showValue) line += ` ${formatCount(value).padStart(valueWidth)}`;
 		lines.push(line);
 	}
 
@@ -1216,7 +1087,7 @@ function renderDowTable(range: RangeAgg, mode: MeasurementMode): string[] {
 	const dowWidth = 5; // "day  "
 
 	const lines: string[] = [];
-	lines.push(`${padRight("day", dowWidth)}  ${padLeft(kind, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`);
+	lines.push(`${"day".padEnd(dowWidth)}  ${kind.padStart(valueWidth)}  ${"cost".padStart(10)}  ${"share".padStart(6)}`);
 	lines.push(`${"-".repeat(dowWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`);
 
 	// Always show in Mon–Sun order
@@ -1225,7 +1096,7 @@ function renderDowTable(range: RangeAgg, mode: MeasurementMode): string[] {
 		const cost = range.dowCost.get(dow) ?? 0;
 		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
 		lines.push(
-			`${padRight(dow, dowWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
+			`${dow.padEnd(dowWidth)}  ${formatCount(value).padStart(valueWidth)}  ${formatUsd(cost).padStart(10)}  ${share.padStart(6)}`,
 		);
 	}
 
@@ -1254,7 +1125,7 @@ function renderTodTable(range: RangeAgg, mode: MeasurementMode): string[] {
 	const todWidth = 22; // widest label
 
 	const lines: string[] = [];
-	lines.push(`${padRight("time of day", todWidth)}  ${padLeft(kind, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`);
+	lines.push(`${"time of day".padEnd(todWidth)}  ${kind.padStart(valueWidth)}  ${"cost".padStart(10)}  ${"share".padStart(6)}`);
 	lines.push(`${"-".repeat(todWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`);
 
 	// Always show in chronological order
@@ -1263,27 +1134,11 @@ function renderTodTable(range: RangeAgg, mode: MeasurementMode): string[] {
 		const cost = range.todCost.get(b.key) ?? 0;
 		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
 		lines.push(
-			`${padRight(b.label, todWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
+			`${b.label.padEnd(todWidth)}  ${formatCount(value).padStart(valueWidth)}  ${formatUsd(cost).padStart(10)}  ${share.padStart(6)}`,
 		);
 	}
 
 	return lines;
-}
-
-function renderLeftRight(left: string, right: string, width: number): string {
-	const leftW = visibleWidth(left);
-	if (width <= 0) return "";
-	if (leftW >= width) return truncateToWidth(left, width);
-
-	const remaining = width - leftW;
-	let rightText = right;
-	const rightW = visibleWidth(rightText);
-	if (rightW > remaining) {
-		// Keep the *rightmost* part visible.
-		rightText = sliceByColumn(rightText, rightW - remaining, remaining, true);
-	}
-	const pad = Math.max(0, remaining - visibleWidth(rightText));
-	return left + " ".repeat(pad) + rightText;
 }
 
 function rangeSummary(range: RangeAgg, days: number, mode: MeasurementMode): string {
@@ -1309,7 +1164,7 @@ async function computeBreakdown(
 	const range90 = ranges.get(90)!;
 	const start90 = range90.days[0].date;
 
-	onProgress?.({ phase: "scan", foundFiles: 0, parsedFiles: 0, totalFiles: 0, currentFile: undefined });
+	onProgress?.({ phase: "scan", foundFiles: 0, parsedFiles: 0, totalFiles: 0 });
 
 	const candidates = await walkSessionFiles(SESSION_ROOT, start90, signal, (found) => {
 		onProgress?.({ phase: "scan", foundFiles: found });
@@ -1321,14 +1176,13 @@ async function computeBreakdown(
 		foundFiles: totalFiles,
 		totalFiles,
 		parsedFiles: 0,
-		currentFile: totalFiles > 0 ? path.basename(candidates[0]!) : undefined,
 	});
 
 	let parsedFiles = 0;
 	for (const filePath of candidates) {
 		if (signal?.aborted) break;
 		parsedFiles += 1;
-		onProgress?.({ phase: "parse", parsedFiles, totalFiles, currentFile: path.basename(filePath) });
+		onProgress?.({ phase: "parse", parsedFiles, totalFiles });
 
 		const session = await parseSessionFile(filePath, signal);
 		if (!session) continue;
@@ -1343,13 +1197,13 @@ async function computeBreakdown(
 		}
 	}
 
-	onProgress?.({ phase: "finalize", currentFile: undefined });
+	onProgress?.({ phase: "finalize" });
 
 	const palette = choosePaletteFromLast30Days(ranges.get(30)!, 4);
 	const cwdPalette = chooseCwdPaletteFromLast30Days(ranges.get(30)!, 4);
 	const dowPalette = buildDowPalette();
 	const todPalette = buildTodPalette();
-	return { generatedAt: now, ranges, palette, cwdPalette, dowPalette, todPalette };
+	return { ranges, palette, cwdPalette, dowPalette, todPalette };
 }
 
 class BreakdownComponent implements Component {
@@ -1621,7 +1475,6 @@ export default function sessionBreakdownExtension(pi: ExtensionAPI) {
 					foundFiles: 0,
 					parsedFiles: 0,
 					totalFiles: 0,
-					currentFile: undefined,
 				};
 
 				const renderMessage = (): string => {
