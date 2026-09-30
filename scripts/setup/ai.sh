@@ -22,40 +22,35 @@ pi_package() {
   fi
 }
 
+# Succeeds when the JSON array on stdin has an item whose key equals value, optionally in the given scope.
+json_has() {
+  node -e '
+    const [key, value, scope] = process.argv.slice(1);
+    const items = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+    process.exit(items.some(item => item[key] === value && (!scope || item.scope === scope)) ? 0 : 1);' "$@"
+}
+
 claude_plugin() {
   local repo=$1 marketplace=$2 plugin=$3
-  if ! claude plugin marketplace list --json | node -e '
-    let data = "";
-    process.stdin.on("data", chunk => data += chunk).on("end", () => {
-      process.exit(JSON.parse(data).some(item => item.name === process.argv[1]) ? 0 : 1);
-    });' "$marketplace"; then
+  if ! claude plugin marketplace list --json | json_has name "$marketplace"; then
     backup "$HOME/.claude/settings.json"
     claude plugin marketplace add "$repo"
   fi
 
-  if ! claude plugin list --json | node -e '
-    let data = "";
-    process.stdin.on("data", chunk => data += chunk).on("end", () => {
-      process.exit(JSON.parse(data).some(item => item.id === process.argv[1] && item.scope === "user") ? 0 : 1);
-    });' "$plugin"; then
+  if ! claude plugin list --json | json_has id "$plugin" user; then
     backup "$HOME/.claude/settings.json"
     claude plugin install "$plugin" --scope user
   fi
 }
 
 install_skill() {
-  local repo=$1 skill=$2 name=$3 agent dest
-  for agent in pi claude-code; do
-    if [ "$agent" = pi ]; then
-      dest="$HOME/.pi/agent/skills/$name"
-    else
-      dest="$HOME/.claude/skills/$name"
-    fi
-
+  local repo=$1 skill=$2 name=$3 pair dest
+  for pair in "pi:$HOME/.pi/agent" "claude-code:$HOME/.claude"; do
+    dest="${pair#*:}/skills/$name"
     if [ -f "$dest/SKILL.md" ]; then
       printf 'Existing skill preserved: %s (use gh skill update separately)\n' "$dest"
     else
-      gh skill install "$repo" "$skill" --agent "$agent" --scope user
+      gh skill install "$repo" "$skill" --agent "${pair%%:*}" --scope user
     fi
   done
 }
@@ -108,11 +103,7 @@ ai_stage() {
     retire "$HOME/.pi/agent/skills/gh-cli"
     retire "$HOME/.claude/skills/gh-cli"
     retire "$HOME/.agents/skills/gh-cli"
-    if claude plugin list --json | node -e '
-      let data = "";
-      process.stdin.on("data", chunk => data += chunk).on("end", () => {
-        process.exit(JSON.parse(data).some(item => item.id === "gh-cli@kit" && item.scope === "user") ? 0 : 1);
-      });'; then
+    if claude plugin list --json | json_has id gh-cli@kit user; then
       confirm 'Remove gh-cli@kit in favor of the official gh skill?' || die 'Resolve the duplicate gh-cli plugin first.'
       backup "$HOME/.claude/settings.json"
       claude plugin uninstall gh-cli@kit --scope user
