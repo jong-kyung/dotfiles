@@ -127,43 +127,22 @@ shell_stage() {
   vp --version; vp env current; bun --version; rustc --version
 }
 git_stage() {
-  if ! $DRY_RUN; then
-    need git; need gpg; need pinentry-mac; need delta
-    git help --config | grep -Fx 'pull.autoStash' >/dev/null || die 'This Git lacks pull.autoStash. Install or explicitly upgrade Homebrew Git first.'
-  fi
-  copy_file "$ROOT/git/gitconfig" "$HOME/.gitconfig"
-  if $DRY_RUN; then log 'git: ask for local identity; GPG signing is enabled only after a secret key is available'; return; fi
-  local local_config="$HOME/.gitconfig.local" name email key
-  # Personal identity and key selection are never stored in the repository.
-  if [ ! -e "$local_config" ]; then
-    printf 'Git author name: ' >&2; IFS= read -r name || die 'Git name was not supplied.'
-    printf 'Git author email: ' >&2; IFS= read -r email || die 'Git email was not supplied.'
-    [ -n "$name" ] && [ -n "$email" ] || die 'Git name and email must not be empty.'
-    git config --file "$WORK/git.local" user.name "$name"
-    git config --file "$WORK/git.local" user.email "$email"
-    copy_file "$WORK/git.local" "$local_config"
-  fi
+  if $DRY_RUN; then log 'git: merge shared preferences into ~/.gitconfig, preserve identity/signing/includes, and configure GPG pinentry'; return; fi
+  need git; need gpg; need pinentry-mac; need delta
+  git help --config | grep -Fx 'pull.autoStash' >/dev/null || die 'This Git lacks pull.autoStash. Install or explicitly upgrade Homebrew Git first.'
+  local entry key
+  if [ -f "$HOME/.gitconfig" ]; then cp "$HOME/.gitconfig" "$WORK/gitconfig"; else : > "$WORK/gitconfig"; fi
+  git config --file "$ROOT/git/gitconfig" --null --list > "$WORK/git-defaults"
+  while IFS= read -r -d '' entry; do
+    key=${entry%%$'\n'*}
+    git config --file "$WORK/gitconfig" --replace-all "$key" "${entry#*$'\n'}"
+  done < "$WORK/git-defaults"
+  copy_file "$WORK/gitconfig" "$HOME/.gitconfig"
   mkdir -p "$HOME/.gnupg"; chmod 700 "$HOME/.gnupg"
   local agent="$HOME/.gnupg/gpg-agent.conf"
   if [ -f "$agent" ]; then grep -vE '^[[:space:]]*pinentry-program([[:space:]]|$)' "$agent" > "$WORK/gpg-agent.conf" || [ "$?" -eq 1 ]; fi
   printf 'pinentry-program %s\n' "$(command -v pinentry-mac)" >> "$WORK/gpg-agent.conf"
   copy_file "$WORK/gpg-agent.conf" "$agent"
-  if [ "$(git config --file "$local_config" --get commit.gpgsign || true)" != true ]; then
-    printf 'GPG secret-key fingerprint (empty to configure later): ' >&2
-    IFS= read -r key || key=
-    if [ -n "$key" ]; then
-      case "$key" in *[!0-9A-Fa-f]*) die 'Use the full hexadecimal GPG fingerprint.';; esac
-      [ ${#key} -ge 40 ] || die 'Use the full GPG fingerprint, not a short key ID.'
-      gpg --list-secret-keys "$key" >/dev/null 2>&1 || die 'Secret key not found. Import or generate it manually first.'
-      cp "$local_config" "$WORK/git.signing"
-      git config --file "$WORK/git.signing" user.signingkey "$key"
-      git config --file "$WORK/git.signing" commit.gpgsign true
-      git config --file "$WORK/git.signing" tag.gpgsign true
-      copy_file "$WORK/git.signing" "$local_config"
-    else
-      printf 'Signing is not configured. Prepare your GPG key, then rerun ./setup git.\n'
-    fi
-  fi
 }
 ghostty_stage() {
   copy_file "$ROOT/ghostty/config" "$HOME/Library/Application Support/com.mitchellh.ghostty/config"

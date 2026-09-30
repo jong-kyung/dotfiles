@@ -19,10 +19,3 @@
 	navigate = true
 [merge]
 	conflictstyle = zdiff3
-# Enable signing in the local file only after preparing a secret key.
-[commit]
-	gpgsign = false
-[tag]
-	gpgsign = false
-[include]
-	path = ~/.gitconfig.local
