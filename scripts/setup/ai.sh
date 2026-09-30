@@ -57,7 +57,7 @@ ai_prepare() {
   fi
   if $DRY_RUN; then
     log 'shared AI tools: CodeGraph, gh-stack extension and agent-browser Chrome'
-    printf 'Install missing tools only. Legacy files, packages and plugins are preserved.\n'
+    printf 'Install missing tools only.\n'
   else
     need node
     need gh
