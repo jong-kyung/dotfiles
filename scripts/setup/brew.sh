@@ -11,5 +11,4 @@ brew_stage() {
 
   need brew
   HOMEBREW_NO_AUTO_UPDATE=1 brew bundle install --file="$ROOT/Brewfile" --no-upgrade
-  brew list --versions
 }
