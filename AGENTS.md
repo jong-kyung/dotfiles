@@ -1,12 +1,8 @@
-## CodeGraph Context-Finding Policy
+## Code navigation
 
-Use the CodeGraph CLI (via the `codegraph` skill and Bash) as the primary code-navigation tool.
+Prefer the official CodeGraph MCP tools for structural code exploration when a project has an index. Follow the server's current usage guidance. Use the CodeGraph CLI when MCP is unavailable.
 
-- For code exploration, semantic context, symbol lookup, call graphs, impact analysis, or affected-test discovery, prefer `codegraph` before shell `grep`, `rg`, `find`, or broad file listing.
-- Start non-trivial code changes with `codegraph explore "<task>"`, then inspect exact files with Read.
-- Before changing shared symbols, use `codegraph callers`, `codegraph callees`, or `codegraph impact`.
-- After changing files, use `codegraph affected <files>` to choose focused tests.
-- Still use exact text search for literal error messages, config keys, user-visible strings, or files that may not be indexed.
+If no index exists, use ordinary file tools. Creating a project index with `codegraph init` is the user's decision. Use exact text search for literal messages, configuration keys, and files outside the index.
 
 ## Git policy
 
@@ -18,8 +14,7 @@ Never create a pull request or post a comment on a pull request without the user
 
 Create pull requests as drafts by default after receiving approval to create them.
 
-
-# Writing style
+## Writing style
 
 Write prose as natural, complete sentences. Do not hard-wrap paragraphs in Markdown.
 
