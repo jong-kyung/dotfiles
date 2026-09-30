@@ -43,8 +43,9 @@ try {
       for (const [name, server] of Object.entries(servers)) {
         object(server, 'MCP server');
         const legacySse = server.type === 'sse' || (typeof server.url === 'string' && new URL(server.url).pathname.replace(/\/$/, '').endsWith('/sse'));
-        if (server.enabled !== false && legacySse) {
-          console.error(`Candidate change: disable legacy SSE server ${JSON.stringify(name)}; Pi native MCP needs streamable HTTP. Its configuration is preserved.`);
+        if (legacySse && (server.enabled !== false || server.type === 'sse')) {
+          console.error(`Candidate change: normalize and disable legacy SSE server ${JSON.stringify(name)}; Pi native MCP needs streamable HTTP. Remaining configuration is preserved.`);
+          if (server.type === 'sse') delete server.type;
           server.enabled = false;
         }
       }
