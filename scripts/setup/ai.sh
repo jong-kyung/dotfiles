@@ -13,11 +13,6 @@ pi_package() {
   fi
 }
 
-# Succeeds when the JSON array on stdin has an item whose key equals value, optionally in the given scope.
-json_has() {
-  node "$ROOT/scripts/setup-query.mjs" json-has "$@"
-}
-
 claude_plugin() {
   local repo=$1 marketplace=$2 plugin=$3 state result=0
   state=$(claude plugin marketplace list --json | node "$ROOT/scripts/setup-query.mjs" claude-marketplace "$marketplace" "$repo") \
@@ -32,7 +27,7 @@ claude_plugin() {
   fi
 
   claude plugin list --json > "$WORK/claude-plugins.json" || die 'Cannot list Claude plugins.'
-  json_has id "$plugin" user < "$WORK/claude-plugins.json" || result=$?
+  node "$ROOT/scripts/setup-query.mjs" json-has id "$plugin" user < "$WORK/claude-plugins.json" || result=$?
   [ "$result" -le 1 ] || die 'Cannot inspect Claude plugin settings.'
   if [ "$result" -eq 0 ]; then
     status EXISTS "Claude plugin: $plugin"
