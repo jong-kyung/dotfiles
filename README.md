@@ -51,7 +51,7 @@ See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code gui
 
 Homebrew checks the Brewfile without upgrades and skips installation when all dependencies are present. AI stages request GitHub authentication only for missing GitHub extensions or skills. Failed Pi, Claude or GitHub extension queries stop setup rather than trigger a reinstall.
 
-Browser setup reuses executable Chrome, Canary, Chromium, Brave, and agent-browser, Puppeteer or Playwright cache paths recognized by agent-browser on macOS. It also respects `AGENT_BROWSER_EXECUTABLE_PATH`. Chrome is downloaded only when no browser is found. Detection checks executable files without launching a browser.
+Homebrew installs the agent-browser CLI, but setup does not inspect or install browsers. Prepare a compatible browser yourself before using agent-browser.
 
 ## Configuration and backups
 

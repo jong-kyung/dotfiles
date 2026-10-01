@@ -77,48 +77,18 @@ install_skills() {
   done < "$WORK/skills"
 }
 
-install_browser() {
-  local browser
-  if [ -n "${AGENT_BROWSER_EXECUTABLE_PATH:-}" ]; then
-    [ -f "$AGENT_BROWSER_EXECUTABLE_PATH" ] && [ -x "$AGENT_BROWSER_EXECUTABLE_PATH" ] \
-      || die "Browser is not executable: $AGENT_BROWSER_EXECUTABLE_PATH"
-  fi
-  # Match agent-browser 0.38.1 macOS discovery without running doctor, which cleans daemon files.
-  for browser in \
-    "${AGENT_BROWSER_EXECUTABLE_PATH:-}" \
-    "$HOME/.agent-browser/browsers"/chrome-*/"Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
-    "$HOME/.agent-browser/browsers"/chrome-*/chrome-mac-{arm64,x64}/"Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
-    '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary' \
-    '/Applications/Chromium.app/Contents/MacOS/Chromium' \
-    '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser' \
-    "${PUPPETEER_CACHE_DIR:-$HOME/.cache/puppeteer}"/chrome/*/chrome-mac-{arm64,x64}/"Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
-    "$HOME/.cache/puppeteer"/chrome/*/chrome-mac-{arm64,x64}/"Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" \
-    "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"/chromium-*/"chrome-mac/Chromium.app/Contents/MacOS/Chromium" \
-    "$HOME/.cache/ms-playwright"/chromium-*/"chrome-mac/Chromium.app/Contents/MacOS/Chromium"; do
-    if [ -f "$browser" ] && [ -x "$browser" ]; then
-      status EXISTS "Browser: $browser"
-      return
-    fi
-  done
-  status INSTALLING 'agent-browser Chrome'
-  agent-browser install
-  status INSTALLED 'agent-browser Chrome'
-}
-
 ai_prepare() {
   local extensions
   if ${AI_PREPARED:-false}; then
     return
   fi
   if $DRY_RUN; then
-    log 'shared AI tools: CodeGraph, gh-stack extension and agent-browser Chrome'
-    printf 'Install missing tools only and reuse an existing browser.\n'
+    log 'shared AI tools: CodeGraph and gh-stack extension'
+    printf 'Install missing tools only.\n'
   else
     GITHUB_READY=false
     need node
     need gh
-    need agent-browser
     node "$ROOT/scripts/setup-query.mjs" skills "$ROOT/skills.json" > "$WORK/skills" || die 'Cannot read skills.json.'
 
     if ! has codegraph; then
@@ -135,7 +105,6 @@ ai_prepare() {
       gh extension install github/gh-stack
       status INSTALLED gh-stack
     fi
-    install_browser
   fi
   AI_PREPARED=true
 }
