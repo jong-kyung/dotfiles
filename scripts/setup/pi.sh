@@ -1,42 +1,31 @@
 pi_stage() {
   local file source installed
   ai_prepare
-  if $DRY_RUN; then
-    log 'Pi: CLI, packages from pi.json and Herdr integration'
-    printf 'Enable native MCP and normalize and disable legacy SSE servers. Preserve other preferences.\n'
+  if ! has pi; then
+    need vp
+    status INSTALLING Pi
+    vp install -g @earendil-works/pi-coding-agent --ignore-scripts
+    status INSTALLED Pi
   else
-    if ! has pi; then
-      need vp
-      status INSTALLING Pi
-      vp install -g @earendil-works/pi-coding-agent --ignore-scripts
-      status INSTALLED Pi
-    else
-      status EXISTS Pi
-    fi
-    pi mcp --help >/dev/null 2>&1 || die 'Pi needs native MCP support. Upgrade Pi explicitly, then retry.'
+    status EXISTS Pi
   fi
+  pi mcp --help >/dev/null 2>&1 || die 'Pi needs native MCP support. Upgrade Pi explicitly, then retry.'
 
   merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
   merge_json pi "$HOME/.pi/agent/settings.json"
   while IFS=$'\t' read -r source installed; do
     [ -n "$source" ] || continue
-    if $DRY_RUN; then
-      status PLAN "Pi package: ${source#npm:}"
-    else
-      pi_package "$source" "$HOME/.pi/agent/$installed"
-    fi
+    pi_package "$source" "$HOME/.pi/agent/$installed"
   done <<< "$PI_PACKAGES"
 
-  if ! $DRY_RUN; then
-    # Herdr owns this generated integration; do not vendor its files here.
-    if [ ! -f "$HOME/.pi/agent/extensions/herdr-agent-state.ts" ]; then
-      need herdr
-      status INSTALLING 'Herdr Pi integration'
-      herdr integration install pi
-      status INSTALLED 'Herdr Pi integration'
-    else
-      status EXISTS 'Herdr Pi integration'
-    fi
+  # Herdr owns this generated integration; do not vendor its files here.
+  if [ ! -f "$HOME/.pi/agent/extensions/herdr-agent-state.ts" ]; then
+    need herdr
+    status INSTALLING 'Herdr Pi integration'
+    herdr integration install pi
+    status INSTALLED 'Herdr Pi integration'
+  else
+    status EXISTS 'Herdr Pi integration'
   fi
   install_skills pi "$HOME/.pi/agent"
   copy_file "$ROOT/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
@@ -44,11 +33,9 @@ pi_stage() {
     copy_file "$ROOT/pi/extensions/$file.ts" "$HOME/.pi/agent/extensions/$file.ts"
   done
 
-  if ! $DRY_RUN; then
-    pi --version
-    pi list
-    codegraph --version
-    printf 'Restart Pi. Sign in manually. Run pi mcp list to verify CodeGraph.\n'
-    printf 'Project indexes are opt-in: run codegraph init in each chosen project yourself.\n'
-  fi
+  pi --version
+  pi list
+  codegraph --version
+  printf 'Restart Pi. Sign in manually. Run pi mcp list to verify CodeGraph.\n'
+  printf 'Project indexes are opt-in: run codegraph init in each chosen project yourself.\n'
 }

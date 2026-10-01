@@ -54,16 +54,10 @@ github_ready() {
 
 install_skills() {
   local agent=$1 directory=$2 repo skill dest ready=false
-  if $DRY_RUN; then
-    log "Skills from skills.json for $agent (missing only)"
-  fi
-
   while IFS=$'\t' read -r repo skill; do
     [ -n "$repo" ] || continue
     dest="$directory/skills/$skill"
-    if $DRY_RUN; then
-      status PLAN "Skill: $skill ($repo)"
-    elif [ -f "$dest/SKILL.md" ]; then
+    if [ -f "$dest/SKILL.md" ]; then
       status EXISTS "Skill: $dest"
     else
       if ! $ready; then
@@ -83,27 +77,22 @@ ai_prepare() {
   if ${AI_PREPARED:-false}; then
     return
   fi
-  if $DRY_RUN; then
-    log 'shared AI tools: CodeGraph and gh-stack extension'
-    printf 'Install missing tools only.\n'
+  GITHUB_READY=false
+  need node
+  need gh
+  if ! has codegraph; then
+    installer https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh /bin/sh
   else
-    GITHUB_READY=false
-    need node
-    need gh
-    if ! has codegraph; then
-      installer https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh /bin/sh
-    else
-      status EXISTS CodeGraph
-    fi
-    extensions=$(gh extension list) || die 'Cannot list GitHub CLI extensions.'
-    if printf '%s\n' "$extensions" | grep -E '(^|[[:space:]])github/gh-stack([[:space:]]|$)' >/dev/null; then
-      status EXISTS gh-stack
-    else
-      github_ready
-      status INSTALLING gh-stack
-      gh extension install github/gh-stack
-      status INSTALLED gh-stack
-    fi
+    status EXISTS CodeGraph
+  fi
+  extensions=$(gh extension list) || die 'Cannot list GitHub CLI extensions.'
+  if printf '%s\n' "$extensions" | grep -E '(^|[[:space:]])github/gh-stack([[:space:]]|$)' >/dev/null; then
+    status EXISTS gh-stack
+  else
+    github_ready
+    status INSTALLING gh-stack
+    gh extension install github/gh-stack
+    status INSTALLED gh-stack
   fi
   AI_PREPARED=true
 }

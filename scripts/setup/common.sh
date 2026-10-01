@@ -108,14 +108,6 @@ copy_file() {
   if [ -e "$target" ] || [ -L "$target" ]; then
     result=UPDATED
   fi
-  if $DRY_RUN; then
-    if [ "$result" = UPDATED ]; then
-      status PLAN "Back up and replace: $target"
-    else
-      status PLAN "Create: $target"
-    fi
-    return
-  fi
 
   backup "$target"
 
@@ -130,11 +122,6 @@ copy_file() {
 
 merge_json() {
   local mode=$1 target=$2
-  if $DRY_RUN; then
-    status PLAN "Merge managed $mode settings (back up if changed): $target"
-    return
-  fi
-
   node "$ROOT/scripts/config.mjs" "$mode" "$target" > "$WORK/config.json"
   copy_file "$WORK/config.json" "$target"
 }

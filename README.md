@@ -9,13 +9,11 @@ Run `xcode-select --install` and wait for Command Line Tools to finish installin
 ```sh
 git clone https://github.com/jong-kyung/dotfiles.git
 cd dotfiles
-./setup --dry-run brew shell
 ./setup brew shell
-./setup --dry-run
 ./setup
 ```
 
-Run as your own user, without `sudo`. `./setup` shows a numbered menu. Enter comma-separated numbers such as `1,3,5`, or `all` for everything. Empty input cancels, and invalid input prompts again. Review the selected work and approve it once. Homebrew and other external installers may still request authentication.
+Run as your own user, without `sudo`. `./setup` shows a numbered menu. Enter comma-separated numbers such as `1,3,5`, or `all` for everything. Empty input cancels, and invalid input prompts again. Confirm the selected stages once before execution. Homebrew and other external installers may still request authentication.
 
 If setup stops at an AI stage because GitHub authentication is missing, sign in and resume:
 
@@ -36,12 +34,11 @@ Sign in to Pi and Claude Code yourself after installation. Setup does not copy c
 ./setup pi                   # Pi packages, extensions, skills, and CodeGraph MCP
 ./setup claude               # Claude Code plugins, hooks, skills, and CodeGraph MCP
 ./setup ai                   # Both Pi and Claude Code
-./setup --dry-run git pi     # Preview selected stages without changes
 ```
 
-The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Pi, and `6` for Claude Code. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. `--dry-run` never prompts and previews all stages when none are specified. Actual installation requires an interactive terminal.
+The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Pi, and `6` for Claude Code. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. Only the selected stage names are shown before approval. Installation requires an interactive terminal.
 
-Run `brew` and `shell` before other stages on a new Mac. Pi and Claude Code require Node even for a preview because their JSON installation lists are read before approval. If Node is missing, setup asks you to run `./setup brew shell` first and stops without changes. Rerun a stage after fixing an installation error. Cancelling exits without changes.
+Run `brew` and `shell` before other stages on a new Mac. Pi and Claude Code require Node because their JSON installation lists are validated before approval. If Node is missing, setup asks you to run `./setup brew shell` first and stops without changes. Rerun a stage after fixing an installation error. Cancelling exits without changes.
 
 Only status labels are colored. Successful changes are green, existing or unchanged items are cyan, cancellations and warnings are yellow, and errors are red. Descriptions keep the terminal's default color. Redirected output, `TERM=dumb`, and `NO_COLOR` disable colors. External installers keep their own output.
 
@@ -49,7 +46,7 @@ Only status labels are colored. Successful changes are green, existing or unchan
 
 See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code guide](claude/README.md) for the selected tools and settings. Setup leaves macOS system preferences alone.
 
-[pi.json](pi.json) lists Pi package sources, [claude.json](claude.json) lists Claude plugin repositories, marketplaces, and IDs, and [skills.json](skills.json) lists skill repositories and short names. Setup validates the selected lists before approval and uses them for both preview and installation. Pi sources retain their `npm:` prefix for installation but omit it in setup labels. Each AI stage installs missing skills for its own agent with `gh skill install`. Existing installations are preserved, and removing a list entry does not uninstall it. CLI installers, shared AI tools, Herdr integration, and file deployment remain in the shell scripts.
+[pi.json](pi.json) lists Pi package sources, [claude.json](claude.json) lists Claude plugin repositories, marketplaces, and IDs, and [skills.json](skills.json) lists skill repositories and short names. Setup validates the selected lists before approval and uses them for installation. Pi sources retain their `npm:` prefix for installation but omit it in setup labels. Each AI stage installs missing skills for its own agent with `gh skill install`. Existing installations are preserved, and removing a list entry does not uninstall it. CLI installers, shared AI tools, Herdr integration, and file deployment remain in the shell scripts.
 
 Homebrew checks the Brewfile without upgrades and skips installation when all dependencies are present. AI stages request GitHub authentication only for missing GitHub extensions or skills. Failed Pi, Claude or GitHub extension queries stop setup rather than trigger a reinstall.
 
@@ -57,7 +54,7 @@ Homebrew installs the agent-browser CLI, but setup does not inspect or install b
 
 ## Configuration and backups
 
-Edit files in this repository and rerun the relevant stage. Setup previews the affected paths before the single approval, then backs up and replaces existing files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
+Edit files in this repository and rerun the relevant stage. After the single stage approval, setup backs up and replaces managed files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
 
 Backups live in `~/.local/state/dotfiles/backups/<run-id>/`, with paths relative to your home directory. Restore files from there when needed. Keep these private backups out of Git.
 
@@ -89,7 +86,9 @@ zsh -n zsh/zshrc
 node --check scripts/config.mjs
 node --check scripts/setup-query.mjs
 ruby -c Brewfile
-./setup --dry-run
+node scripts/setup-query.mjs pi-packages pi.json
+node scripts/setup-query.mjs claude-plugins claude.json
+node scripts/setup-query.mjs skills skills.json
 git diff --check
 ```
 

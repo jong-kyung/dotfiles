@@ -1,10 +1,4 @@
 shell_stage() {
-  if $DRY_RUN; then
-    log 'shell: Vite+ Node/pnpm, Bun, Rust, Oh My Zsh, zsh-autosuggestions (missing only)'
-    copy_file "$ROOT/zsh/zshrc" "$HOME/.zshrc"
-    return
-  fi
-
   need git
   if ! has bun; then
     BUN_INSTALL="$HOME/.bun" SHELL=/bin/sh installer https://bun.sh/install /bin/bash
