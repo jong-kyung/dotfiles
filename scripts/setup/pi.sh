@@ -7,7 +7,11 @@ pi_stage() {
   else
     if ! has pi; then
       need vp
+      status INSTALLING Pi
       vp install -g @earendil-works/pi-coding-agent --ignore-scripts
+      status INSTALLED Pi
+    else
+      status EXISTS Pi
     fi
     pi mcp --help >/dev/null 2>&1 || die 'Pi needs native MCP support. Upgrade Pi explicitly, then retry.'
   fi
@@ -23,7 +27,11 @@ pi_stage() {
     # Herdr owns this generated integration; do not vendor its files here.
     if [ ! -f "$HOME/.pi/agent/extensions/herdr-agent-state.ts" ]; then
       need herdr
+      status INSTALLING 'Herdr Pi integration'
       herdr integration install pi
+      status INSTALLED 'Herdr Pi integration'
+    else
+      status EXISTS 'Herdr Pi integration'
     fi
   fi
   install_skills pi "$HOME/.pi/agent"

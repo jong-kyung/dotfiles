@@ -8,9 +8,15 @@ claude_stage() {
     need bun
     if ! has claude; then
       installer https://claude.ai/install.sh /bin/bash stable
+    else
+      status EXISTS 'Claude Code'
     fi
     if ! has ccstatusline; then
+      status INSTALLING ccstatusline
       bun install -g ccstatusline
+      status INSTALLED ccstatusline
+    else
+      status EXISTS ccstatusline
     fi
     claude_plugin DietrichGebert/ponytail ponytail ponytail@ponytail
     claude_plugin EveryInc/compound-engineering-plugin compound-engineering-plugin compound-engineering@compound-engineering-plugin

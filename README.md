@@ -49,6 +49,10 @@ See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code gui
 
 [skills.json](skills.json) lists directly installed skills by repository and skill directory path. The Pi and Claude Code stages each install missing entries for their own agent with `gh skill install`. Existing skills are preserved, and removing an entry does not uninstall it. Pi packages and Claude plugins are managed separately.
 
+Homebrew checks the Brewfile without upgrades and skips installation when all dependencies are present. AI stages request GitHub authentication only for missing GitHub extensions or skills. Failed Pi, Claude or GitHub extension queries stop setup rather than trigger a reinstall.
+
+Browser setup reuses executable Chrome, Canary, Chromium, Brave, and agent-browser, Puppeteer or Playwright cache paths recognized by agent-browser on macOS. It also respects `AGENT_BROWSER_EXECUTABLE_PATH`. Chrome is downloaded only when no browser is found. Detection checks executable files without launching a browser.
+
 ## Configuration and backups
 
 Edit files in this repository and rerun the relevant stage. Setup previews the affected paths before the single approval, then backs up and replaces existing files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
@@ -81,6 +85,7 @@ for file in setup scripts/setup/*.sh; do
 done
 zsh -n zsh/zshrc
 node --check scripts/config.mjs
+node --check scripts/setup-query.mjs
 ruby -c Brewfile
 ./setup --dry-run
 git diff --check
