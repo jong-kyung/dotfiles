@@ -1,12 +1,15 @@
 tap "nkzw-tech/tap"
+
 brew "agent-browser"
 brew "gh"
 brew "git"
+brew "git-delta"
 brew "gnupg"
-brew "just"
-brew "mise"
+brew "herdr"
 brew "mole"
 brew "pinentry-mac"
-brew "pnpm"
+
 cask "codiff"
 cask "ghostty"
+cask "font-hack-nerd-font"
+cask "font-noto-sans-cjk-kr"

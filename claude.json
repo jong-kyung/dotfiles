@@ -1,0 +1,4 @@
+[
+  { "repo": "DietrichGebert/ponytail", "marketplace": "ponytail", "plugin": "ponytail@ponytail" },
+  { "repo": "EveryInc/compound-engineering-plugin", "marketplace": "compound-engineering-plugin", "plugin": "compound-engineering@compound-engineering-plugin" }
+]

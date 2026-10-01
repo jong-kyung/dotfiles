@@ -642,39 +642,8 @@ const showActionSelector = async (
 		...(options.canEdit ? [{ value: "edit", label: "Edit" }] : []),
 	];
 
-	return ctx.ui.custom<"reveal" | "quicklook" | "open" | "edit" | "addToPrompt" | "diff" | null>((tui, theme, _kb, done) => {
-		const container = new Container();
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-		container.addChild(new Text(theme.fg("accent", theme.bold("Choose action"))));
-
-		const selectList = new SelectList(actions, actions.length, {
-			selectedPrefix: (text) => theme.fg("accent", text),
-			selectedText: (text) => theme.fg("accent", text),
-			description: (text) => theme.fg("muted", text),
-			scrollInfo: (text) => theme.fg("dim", text),
-			noMatch: (text) => theme.fg("warning", text),
-		});
-
-		selectList.onSelect = (item) => done(item.value as "reveal" | "quicklook" | "open" | "edit" | "addToPrompt" | "diff");
-		selectList.onCancel = () => done(null);
-
-		container.addChild(selectList);
-		container.addChild(new Text(theme.fg("dim", "Press enter to confirm or esc to cancel")));
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-
-		return {
-			render(width: number) {
-				return container.render(width);
-			},
-			invalidate() {
-				container.invalidate();
-			},
-			handleInput(data: string) {
-				selectList.handleInput(data);
-				tui.requestRender();
-			},
-		};
-	});
+	const label = await ctx.ui.select("Choose action", actions.map((action) => action.label));
+	return (actions.find((action) => action.label === label)?.value as "reveal" | "quicklook" | "open" | "edit" | "addToPrompt" | "diff" | undefined) ?? null;
 };
 
 const openPath = async (pi: ExtensionAPI, ctx: ExtensionContext, target: FileEntry): Promise<void> => {

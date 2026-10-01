@@ -1,0 +1,100 @@
+#!/bin/bash
+# Apple Silicon macOS setup. Compatible with the system Bash 3.2.
+set -euo pipefail
+umask 077
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+ALL_STAGES=(brew shell git ghostty pi claude)
+STAGES=()
+REQUESTED=
+WORK=
+BACKUPS=
+TERMINAL_STATE=
+AI_PREPARED=false
+
+source "$ROOT/scripts/setup/common.sh"
+source "$ROOT/scripts/setup/ai.sh"
+
+usage() {
+  printf 'Usage: ./setup [brew shell git ghostty pi claude ai ...]\n'
+  printf 'No stages opens a numbered menu. Use commas (1,3,5) or all. ai selects Pi and Claude Code.\n'
+  printf 'Confirm the selected stages before installation. Updates are never automatic.\n'
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+    brew|shell|git|ghostty|pi|claude) REQUESTED="$REQUESTED $arg" ;;
+    ai) REQUESTED="$REQUESTED pi claude" ;;
+    *) usage >&2; die "Unknown argument: $arg" ;;
+  esac
+done
+
+if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
+  die 'Only Apple Silicon macOS is supported.'
+fi
+
+[ "$(id -u)" != 0 ] || die 'Run as your own user, not with sudo.'
+[ "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" = "$HOME/.pi/agent" ] || die 'Custom PI_CODING_AGENT_DIR is not supported.'
+[ "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" = "$HOME/.claude" ] || die 'Custom CLAUDE_CONFIG_DIR is not supported.'
+[ "${GNUPGHOME:-$HOME/.gnupg}" = "$HOME/.gnupg" ] || die 'Custom GNUPGHOME is not supported.'
+[ -t 0 ] || die 'Run in an interactive terminal to approve changes.'
+
+TERMINAL_STATE=$(stty -g)
+trap 'restore_terminal; if [ -n "$WORK" ]; then rm -rf "$WORK"; fi' EXIT
+trap 'restore_terminal; status CANCELLED "Interrupted."; exit 130' INT
+trap 'restore_terminal; status CANCELLED "Terminated."; exit 143' TERM
+
+if [ -n "$REQUESTED" ]; then
+  for stage in "${ALL_STAGES[@]}"; do
+    case " $REQUESTED " in
+      *" $stage "*) STAGES+=("$stage") ;;
+    esac
+  done
+else
+  select_stages
+fi
+
+export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+
+case " ${STAGES[*]} " in
+  *" pi "*|*" claude "*)
+    need node
+    SKILLS=$(node "$ROOT/scripts/setup-query.mjs" skills "$ROOT/skills.json") || die 'Cannot read skills.json.'
+    readonly SKILLS
+    ;;
+esac
+for stage in "${STAGES[@]}"; do
+  case "$stage" in
+    pi)
+      PI_PACKAGES=$(node "$ROOT/scripts/setup-query.mjs" pi-packages "$ROOT/pi.json") || die 'Cannot read pi.json.'
+      readonly PI_PACKAGES
+      ;;
+    claude)
+      CLAUDE_PLUGINS=$(node "$ROOT/scripts/setup-query.mjs" claude-plugins "$ROOT/claude.json") || die 'Cannot read claude.json.'
+      readonly CLAUDE_PLUGINS
+      ;;
+  esac
+  source "$ROOT/scripts/setup/$stage.sh"
+done
+
+printf '\nSelected: %s\n' "${STAGES[*]}"
+
+printf '\nExisting settings will be backed up before replacement or merge. Identical files are skipped.\n'
+printf 'Selected stages run in the listed order. External installers may request authentication.\n'
+if ! confirm 'Apply all selected stages?'; then
+  status CANCELLED 'Nothing changed.'
+  exit 0
+fi
+
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles.XXXXXX")
+for stage in "${STAGES[@]}"; do
+  log "$stage"
+  "${stage}_stage"
+  restore_terminal
+done
+
+if [ -n "$BACKUPS" ]; then
+  printf '\nBackups: %s\n' "$BACKUPS"
+fi
+status DONE 'Setup complete. Open a new terminal to load shell changes.'
