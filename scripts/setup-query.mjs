@@ -2,16 +2,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 const [mode, ...args] = process.argv.slice(2);
-if (mode === 'pi-source') {
+if (mode === 'pi-has-package') {
   const file = process.env.HOME + '/.pi/agent/settings.json';
   const entries = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).packages ?? [] : [];
-  for (const entry of entries) {
+  process.exitCode = entries.some(entry => {
     const source = typeof entry === 'string' ? entry : entry.source;
-    if (source === args[0] || source?.startsWith(args[0] + '@')) {
-      console.log(source);
-      break;
-    }
-  }
+    return source === args[0] || source?.startsWith(args[0] + '@');
+  }) ? 0 : 1;
 } else if (mode === 'json-has') {
   const [key, value, scope] = args;
   const items = JSON.parse(readFileSync(0, 'utf8'));

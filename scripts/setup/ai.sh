@@ -1,11 +1,7 @@
 # Shared helpers for the independently selectable Pi and Claude Code stages.
-pi_source() {
-  node "$ROOT/scripts/setup-query.mjs" pi-source "$1"
-}
-
 pi_package() {
   local source=$1 installed=$2
-  if [ -n "$(pi_source "$source")" ] && [ -f "$installed/package.json" ]; then
+  if node "$ROOT/scripts/setup-query.mjs" pi-has-package "$source" && [ -f "$installed/package.json" ]; then
     printf 'Installed Pi package: %s\n' "$source"
   else
     backup "$HOME/.pi/agent/settings.json"
