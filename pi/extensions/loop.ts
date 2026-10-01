@@ -85,7 +85,7 @@ function updateStatus(ctx: ExtensionContext, state: LoopStateData): void {
 	}
 	const loopCount = state.loopCount ?? 0;
 	const turnText = `(turn ${loopCount})`;
-	const summary = state.summary?.trim();
+	const summary = (state.summary || summarizeCondition(state.mode, state.condition)).trim();
 	const text = summary
 		? `Loop active: ${summary} ${turnText}`
 		: `Loop active ${turnText}`;
@@ -257,12 +257,11 @@ export default function loopExtension(pi: ExtensionAPI): void {
 				}
 			}
 
-			const summarizedState: LoopStateData = {
+			const initialState: LoopStateData = {
 				...nextState,
-				summary: summarizeCondition(nextState.mode!, nextState.condition),
 				loopCount: 0,
 			};
-			setLoopState(summarizedState, ctx);
+			setLoopState(initialState, ctx);
 			ctx.ui.notify("Loop active", "info");
 			triggerLoopPrompt(ctx);
 		},
@@ -315,10 +314,6 @@ export default function loopExtension(pi: ExtensionAPI): void {
 
 	async function restoreLoopState(ctx: ExtensionContext): Promise<void> {
 		loopState = await loadState(ctx);
-		if (loopState.active && loopState.mode && !loopState.summary) {
-			loopState = { ...loopState, summary: summarizeCondition(loopState.mode, loopState.condition) };
-			persistState(loopState);
-		}
 		updateStatus(ctx, loopState);
 	}
 
