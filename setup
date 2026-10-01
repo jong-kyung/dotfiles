@@ -45,8 +45,8 @@ if ! $DRY_RUN; then
 
   TERMINAL_STATE=$(stty -g)
   trap 'restore_terminal; if [ -n "$WORK" ]; then rm -rf "$WORK"; fi' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  trap 'restore_terminal; status CANCELLED "Interrupted."; exit 130' INT
+  trap 'restore_terminal; status CANCELLED "Terminated."; exit 143' TERM
 fi
 
 if [ -n "$REQUESTED" ]; then
@@ -77,14 +77,14 @@ printf '\nSelected: %s\n' "${STAGES[*]}"
 )
 
 if $DRY_RUN; then
-  printf '\nPreview only. Nothing changed.\n'
+  status PLAN 'Preview only. Nothing changed.'
   exit 0
 fi
 
 printf '\nExisting settings will be backed up before replacement or merge. Identical files are skipped.\n'
 printf 'Selected stages run in the listed order. External installers may request authentication.\n'
 if ! confirm 'Apply all selected stages?'; then
-  printf 'Cancelled. Nothing changed.\n'
+  status CANCELLED 'Nothing changed.'
   exit 0
 fi
 
@@ -98,4 +98,4 @@ done
 if [ -n "$BACKUPS" ]; then
   printf '\nBackups: %s\n' "$BACKUPS"
 fi
-printf '\nSetup complete. Open a new terminal to load shell changes.\n'
+status DONE 'Setup complete. Open a new terminal to load shell changes.'

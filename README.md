@@ -41,6 +41,8 @@ The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghost
 
 Run `brew` and `shell` before other stages on a new Mac. Rerun a stage after fixing an installation error. Cancelling exits without changes.
 
+Only status labels are colored. Successful changes are green, existing or unchanged items are cyan, cancellations and warnings are yellow, and errors are red. Descriptions keep the terminal's default color. Redirected output, `TERM=dumb`, and `NO_COLOR` disable colors. External installers keep their own output.
+
 `setup` handles arguments and dispatches stages from `scripts/setup/`. Shared confirmation, backup, and copy helpers live in `scripts/setup/common.sh`.
 
 See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code guide](claude/README.md) for the selected tools and settings. Setup leaves macOS system preferences alone.

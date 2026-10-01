@@ -2,8 +2,25 @@ log() {
   printf '\n==> %s\n' "$*"
 }
 
+status() {
+  local label=$1 color
+  shift
+  case "$label" in
+    INSTALLED|UPDATED|DONE) color=32 ;;
+    EXISTS|UNCHANGED) color=36 ;;
+    CANCELLED|WARNING) color=33 ;;
+    ERROR) color=31 ;;
+    *) color=34 ;;
+  esac
+  if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR+x}" ]; then
+    printf '\033[%sm[%s]\033[0m %s\n' "$color" "$label" "$*"
+  else
+    printf '[%s] %s\n' "$label" "$*"
+  fi
+}
+
 die() {
-  printf 'Error: %s\n' "$*" >&2
+  status ERROR "$*" >&2
   exit 1
 }
 
@@ -42,11 +59,11 @@ select_stages() {
     IFS= read -r choice || choice=
     choice=${choice//[[:space:]]/}
     case "$choice" in
-      '') printf 'Cancelled. Nothing changed.\n'; exit 0 ;;
+      '') status CANCELLED 'Nothing changed.'; exit 0 ;;
       all) STAGES=("${ALL_STAGES[@]}"); return ;;
     esac
     if [[ ! "$choice" =~ ^[1-6](,[1-6])*$ ]]; then
-      printf 'Use numbers 1 through 6 separated by commas, or all.\n' >&2
+      status WARNING 'Use numbers 1 through 6 separated by commas, or all.' >&2
       continue
     fi
     STAGES=()
@@ -81,18 +98,21 @@ backup() {
 }
 
 copy_file() {
-  local source=$1 target=$2 temp
+  local source=$1 target=$2 temp result=INSTALLED
   if [ -f "$target" ] && [ ! -L "$target" ] && cmp -s "$source" "$target"; then
-    printf 'Unchanged: %s\n' "$target"
+    status UNCHANGED "$target"
     return
   fi
 
   [ ! -d "$target" ] || die "Expected a file, found a directory: $target"
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    result=UPDATED
+  fi
   if $DRY_RUN; then
-    if [ -e "$target" ] || [ -L "$target" ]; then
-      printf 'Back up and replace: %s\n' "$target"
+    if [ "$result" = UPDATED ]; then
+      status PLAN "Back up and replace: $target"
     else
-      printf 'Create: %s\n' "$target"
+      status PLAN "Create: $target"
     fi
     return
   fi
@@ -105,13 +125,13 @@ copy_file() {
     rm -f "$temp"
     die "Could not copy $target (backup preserved)."
   fi
-  printf 'Copied: %s\n' "$target"
+  status "$result" "$target"
 }
 
 merge_json() {
   local mode=$1 target=$2
   if $DRY_RUN; then
-    printf 'Merge managed %s settings (back up if changed): %s\n' "$mode" "$target"
+    status PLAN "Merge managed $mode settings (back up if changed): $target"
     return
   fi
 
@@ -122,7 +142,8 @@ merge_json() {
 installer() {
   local url=$1 interpreter=$2
   shift 2
-  log "Official installer: $url"
+  status INSTALLING "$url"
   curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$WORK/installer"
   "$interpreter" "$WORK/installer" "$@"
+  status INSTALLED "$url"
 }
