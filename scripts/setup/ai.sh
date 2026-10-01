@@ -1,15 +1,15 @@
 # Shared helpers for the independently selectable Pi and Claude Code stages.
 pi_package() {
-  local source=$1 installed=$2 result=0
+  local source=$1 installed=$2 result=0 label=${1#npm:}
   node "$ROOT/scripts/setup-query.mjs" pi-has-package "$source" || result=$?
   [ "$result" -le 1 ] || die 'Cannot inspect Pi packages. Check ~/.pi/agent/settings.json.'
   if [ "$result" -eq 0 ] && [ -f "$installed/package.json" ]; then
-    status EXISTS "Pi package: $source"
+    status EXISTS "Pi package: $label"
   else
     backup "$HOME/.pi/agent/settings.json"
-    status INSTALLING "Pi package: $source"
+    status INSTALLING "Pi package: $label"
     pi install "$source"
-    status INSTALLED "Pi package: $source"
+    status INSTALLED "Pi package: $label"
   fi
 }
 
@@ -53,16 +53,17 @@ github_ready() {
 }
 
 install_skills() {
-  local agent=$1 directory=$2 repo skill name dest ready=false
+  local agent=$1 directory=$2 repo skill dest ready=false
   if $DRY_RUN; then
-    printf 'Install missing skills from skills.json for %s; preserve existing skills.\n' "$agent"
-    return
+    log "Skills from skills.json for $agent (missing only)"
   fi
 
   while IFS=$'\t' read -r repo skill; do
-    name=${skill##*/}
-    dest="$directory/skills/$name"
-    if [ -f "$dest/SKILL.md" ]; then
+    [ -n "$repo" ] || continue
+    dest="$directory/skills/$skill"
+    if $DRY_RUN; then
+      status PLAN "Skill: $skill ($repo)"
+    elif [ -f "$dest/SKILL.md" ]; then
       status EXISTS "Skill: $dest"
     else
       if ! $ready; then
@@ -74,7 +75,7 @@ install_skills() {
       gh skill install "$repo" "$skill" --agent "$agent" --scope user
       status INSTALLED "Skill: $dest"
     fi
-  done < "$WORK/skills"
+  done <<< "$SKILLS"
 }
 
 ai_prepare() {
@@ -89,8 +90,6 @@ ai_prepare() {
     GITHUB_READY=false
     need node
     need gh
-    node "$ROOT/scripts/setup-query.mjs" skills "$ROOT/skills.json" > "$WORK/skills" || die 'Cannot read skills.json.'
-
     if ! has codegraph; then
       installer https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh /bin/sh
     else

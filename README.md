@@ -9,6 +9,8 @@ Run `xcode-select --install` and wait for Command Line Tools to finish installin
 ```sh
 git clone https://github.com/jong-kyung/dotfiles.git
 cd dotfiles
+./setup --dry-run brew shell
+./setup brew shell
 ./setup --dry-run
 ./setup
 ```
@@ -39,7 +41,7 @@ Sign in to Pi and Claude Code yourself after installation. Setup does not copy c
 
 The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Pi, and `6` for Claude Code. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. `--dry-run` never prompts and previews all stages when none are specified. Actual installation requires an interactive terminal.
 
-Run `brew` and `shell` before other stages on a new Mac. Rerun a stage after fixing an installation error. Cancelling exits without changes.
+Run `brew` and `shell` before other stages on a new Mac. Pi and Claude Code require Node even for a preview because their JSON installation lists are read before approval. If Node is missing, setup asks you to run `./setup brew shell` first and stops without changes. Rerun a stage after fixing an installation error. Cancelling exits without changes.
 
 Only status labels are colored. Successful changes are green, existing or unchanged items are cyan, cancellations and warnings are yellow, and errors are red. Descriptions keep the terminal's default color. Redirected output, `TERM=dumb`, and `NO_COLOR` disable colors. External installers keep their own output.
 
@@ -47,7 +49,7 @@ Only status labels are colored. Successful changes are green, existing or unchan
 
 See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code guide](claude/README.md) for the selected tools and settings. Setup leaves macOS system preferences alone.
 
-[skills.json](skills.json) lists directly installed skills by repository and skill directory path. The Pi and Claude Code stages each install missing entries for their own agent with `gh skill install`. Existing skills are preserved, and removing an entry does not uninstall it. Pi packages and Claude plugins are managed separately.
+[pi.json](pi.json) lists Pi package sources, [claude.json](claude.json) lists Claude plugin repositories, marketplaces, and IDs, and [skills.json](skills.json) lists skill repositories and short names. Setup validates the selected lists before approval and uses them for both preview and installation. Pi sources retain their `npm:` prefix for installation but omit it in setup labels. Each AI stage installs missing skills for its own agent with `gh skill install`. Existing installations are preserved, and removing a list entry does not uninstall it. CLI installers, shared AI tools, Herdr integration, and file deployment remain in the shell scripts.
 
 Homebrew checks the Brewfile without upgrades and skips installation when all dependencies are present. AI stages request GitHub authentication only for missing GitHub extensions or skills. Failed Pi, Claude or GitHub extension queries stop setup rather than trigger a reinstall.
 

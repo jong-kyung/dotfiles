@@ -63,7 +63,24 @@ fi
 
 export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 
+case " ${STAGES[*]} " in
+  *" pi "*|*" claude "*)
+    need node
+    SKILLS=$(node "$ROOT/scripts/setup-query.mjs" skills "$ROOT/skills.json") || die 'Cannot read skills.json.'
+    readonly SKILLS
+    ;;
+esac
 for stage in "${STAGES[@]}"; do
+  case "$stage" in
+    pi)
+      PI_PACKAGES=$(node "$ROOT/scripts/setup-query.mjs" pi-packages "$ROOT/pi.json") || die 'Cannot read pi.json.'
+      readonly PI_PACKAGES
+      ;;
+    claude)
+      CLAUDE_PLUGINS=$(node "$ROOT/scripts/setup-query.mjs" claude-plugins "$ROOT/claude.json") || die 'Cannot read claude.json.'
+      readonly CLAUDE_PLUGINS
+      ;;
+  esac
   source "$ROOT/scripts/setup/$stage.sh"
 done
 

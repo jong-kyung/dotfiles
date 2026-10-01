@@ -1,0 +1,6 @@
+[
+  { "source": "npm:pi-subagents" },
+  { "source": "npm:pi-ask-user" },
+  { "source": "git:github.com/DietrichGebert/ponytail" },
+  { "source": "git:github.com/EveryInc/compound-engineering-plugin" }
+]

@@ -21,9 +21,30 @@ try {
       throw new Error(`Marketplace ${name} must use GitHub repository ${repo}`);
     }
     console.log(marketplace ? 'present' : 'missing');
-  } else if (mode === 'skills') {
-    const skills = JSON.parse(readFileSync(args[0], 'utf8'));
-    process.stdout.write(skills.map(({ repo, skill }) => `${repo}\t${skill}\n`).join(''));
+  } else if (['pi-packages', 'claude-plugins', 'skills'].includes(mode)) {
+    const entries = JSON.parse(readFileSync(args[0], 'utf8'));
+    const name = '[A-Za-z0-9][A-Za-z0-9._-]*';
+    const fields = mode === 'pi-packages' ? ['source'] : mode === 'skills' ? ['repo', 'skill'] : ['repo', 'marketplace', 'plugin'];
+    const marketplaces = new Map();
+    const rows = entries.map(entry => {
+      if (fields.some(key => typeof entry[key] !== 'string' || /[\s\x00-\x1f\x7f]/.test(entry[key]))) throw new Error('Invalid entry');
+      if (mode === 'pi-packages') {
+        const npm = new RegExp(`^npm:((?:@${name}/)?${name})(?:@${name})?$`).exec(entry.source);
+        const git = new RegExp(`^git:(github\\.com/${name}/${name})(?:@[A-Za-z0-9][A-Za-z0-9._/-]*)?$`).exec(entry.source);
+        if (!npm && !git) throw new Error('Unsupported Pi source');
+        return [entry.source, npm ? `npm/node_modules/${npm[1]}` : `git/${git[1].replace(/\.git$/, '')}`];
+      }
+      if (!new RegExp(`^${name}/${name}$`).test(entry.repo) || !new RegExp(`^${name}$`).test(entry[fields[1]])) throw new Error('Invalid repository or name');
+      if (mode === 'claude-plugins') {
+        if (!new RegExp(`^${name}@${name}$`).test(entry.plugin) || entry.plugin.split('@')[1] !== entry.marketplace) throw new Error('Invalid plugin');
+        if (marketplaces.has(entry.marketplace) && marketplaces.get(entry.marketplace) !== entry.repo) throw new Error('Conflicting marketplace repositories');
+        marketplaces.set(entry.marketplace, entry.repo);
+      }
+      return fields.map(key => entry[key]);
+    });
+    const targets = rows.map(row => row[row.length - 1]);
+    if (new Set(targets).size !== targets.length) throw new Error('Duplicate installation target');
+    process.stdout.write(rows.map(row => row.join('\t') + '\n').join(''));
   } else {
     throw new Error(`Unknown query: ${mode}`);
   }

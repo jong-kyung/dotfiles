@@ -5,8 +5,8 @@ Run `./setup claude` from the repository root, or select `6` in the `./setup` me
 ## Managed resources
 
 - A copy of the shared [AGENTS.md](../AGENTS.md) at `~/.claude/CLAUDE.md`.
-- User-scoped Ponytail and Compound Engineering plugins.
-- Official gh and gh-stack, agent-browser, grilling, and grill-me skills. Existing skills and plugins are preserved. Remove the duplicate `gh-cli@kit` integration yourself if it is installed.
+- User-scoped plugins listed in [claude.json](../claude.json).
+- Skills listed in [skills.json](../skills.json). Existing skills and plugins are preserved. Remove the duplicate `gh-cli@kit` integration yourself if it is installed.
 - `hooks/readonly-gh-api.ts`, registered for Bash PreToolUse events.
 - ccstatusline with model, token, usage, and context indicators.
 - Official CodeGraph MCP in `~/.claude.json`, without automatic tool approval.

@@ -1,8 +1,8 @@
 pi_stage() {
-  local file
+  local file source installed
   ai_prepare
   if $DRY_RUN; then
-    log 'Pi: CLI, pi-subagents, pi-ask-user, Ponytail, Compound Engineering and Herdr integration'
+    log 'Pi: CLI, packages from pi.json and Herdr integration'
     printf 'Enable native MCP and normalize and disable legacy SSE servers. Preserve other preferences.\n'
   else
     if ! has pi; then
@@ -18,12 +18,16 @@ pi_stage() {
 
   merge_json pi-mcp "$HOME/.pi/agent/mcp.json"
   merge_json pi "$HOME/.pi/agent/settings.json"
-  if ! $DRY_RUN; then
-    pi_package npm:pi-subagents "$HOME/.pi/agent/npm/node_modules/pi-subagents"
-    pi_package npm:pi-ask-user "$HOME/.pi/agent/npm/node_modules/pi-ask-user"
-    pi_package git:github.com/DietrichGebert/ponytail "$HOME/.pi/agent/git/github.com/DietrichGebert/ponytail"
-    pi_package git:github.com/EveryInc/compound-engineering-plugin "$HOME/.pi/agent/git/github.com/EveryInc/compound-engineering-plugin"
+  while IFS=$'\t' read -r source installed; do
+    [ -n "$source" ] || continue
+    if $DRY_RUN; then
+      status PLAN "Pi package: ${source#npm:}"
+    else
+      pi_package "$source" "$HOME/.pi/agent/$installed"
+    fi
+  done <<< "$PI_PACKAGES"
 
+  if ! $DRY_RUN; then
     # Herdr owns this generated integration; do not vendor its files here.
     if [ ! -f "$HOME/.pi/agent/extensions/herdr-agent-state.ts" ]; then
       need herdr

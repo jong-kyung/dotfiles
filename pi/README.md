@@ -5,8 +5,8 @@ Run `./setup pi` from the repository root, or select `5` in the `./setup` menu. 
 ## Managed resources
 
 - A copy of the shared [AGENTS.md](../AGENTS.md).
-- Pi packages: pi-subagents, pi-ask-user, Ponytail, and Compound Engineering.
-- Skills: official gh and gh-stack, agent-browser, grilling, and grill-me.
+- Pi packages listed in [pi.json](../pi.json).
+- Skills listed in [skills.json](../skills.json).
 - Official CodeGraph MCP through Pi's built-in MCP support. Setup preserves existing custom CodeGraph resources.
 
 Existing model, provider, thinking, and theme preferences remain unchanged. On a new installation, choose your model after signing in.
