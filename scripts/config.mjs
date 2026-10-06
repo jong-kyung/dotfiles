@@ -1,4 +1,4 @@
-// Render a candidate configuration. setup owns confirmation, backups and writes.
+// Render a candidate configuration. setup owns confirmation and writes.
 import { existsSync, readFileSync } from 'node:fs';
 
 const [mode, file] = process.argv.slice(2);

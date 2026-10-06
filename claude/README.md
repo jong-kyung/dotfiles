@@ -1,6 +1,6 @@
 # Claude Code configuration
 
-Run `./setup claude` from the repository root, or select `6` in the `./setup` menu. This stage does not install or configure Pi. See the [setup guide](../README.md) for prerequisites and backup behavior.
+Run `./setup claude` from the repository root, or select `6` in the `./setup` menu. This stage does not install or configure Pi. See the [setup guide](../README.md) for prerequisites and setup behavior.
 
 ## Managed resources
 

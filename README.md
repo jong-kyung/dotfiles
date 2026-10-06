@@ -42,7 +42,7 @@ Run `brew` and `shell` before other stages on a new Mac. Pi and Claude Code requ
 
 Only status labels are colored. Successful changes are green, existing or unchanged items are cyan, cancellations and warnings are yellow, and errors are red. Descriptions keep the terminal's default color. Redirected output, `TERM=dumb`, and `NO_COLOR` disable colors. External installers keep their own output.
 
-`setup` handles arguments and dispatches stages from `scripts/setup/`. Shared confirmation, backup, and copy helpers live in `scripts/setup/common.sh`.
+`setup` handles arguments and dispatches stages from `scripts/setup/`. Shared confirmation and copy helpers live in `scripts/setup/common.sh`.
 
 See [Brewfile](Brewfile), the [Pi guide](pi/README.md), and the [Claude Code guide](claude/README.md) for the selected tools and settings. Setup leaves macOS system preferences alone.
 
@@ -52,11 +52,9 @@ Homebrew checks the Brewfile without upgrades and skips installation when all de
 
 Homebrew installs the agent-browser CLI, but setup does not inspect or install browsers. Prepare a compatible browser yourself before using agent-browser.
 
-## Configuration and backups
+## Configuration
 
-Edit files in this repository and rerun the relevant stage. After the single stage approval, setup backs up and replaces managed files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
-
-Backups live in `~/.local/state/dotfiles/backups/<run-id>/`, with paths relative to your home directory. Restore files from there when needed. Keep these private backups out of Git.
+Edit files in this repository and rerun the relevant stage. After the single stage approval, setup replaces managed files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
 
 [AGENTS.md](AGENTS.md) is the shared instruction source. Setup copies it to Pi's `~/.pi/agent/AGENTS.md` and Claude's `~/.claude/CLAUDE.md`.
 
