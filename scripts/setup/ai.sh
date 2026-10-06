@@ -6,7 +6,6 @@ pi_package() {
   if [ "$result" -eq 0 ] && [ -f "$installed/package.json" ]; then
     status EXISTS "Pi package: $label"
   else
-    backup "$HOME/.pi/agent/settings.json"
     status INSTALLING "Pi package: $label"
     pi install "$source"
     status INSTALLED "Pi package: $label"
@@ -18,7 +17,6 @@ claude_plugin() {
   state=$(claude plugin marketplace list --json | node "$ROOT/scripts/setup-query.mjs" claude-marketplace "$marketplace" "$repo") \
     || die "Cannot verify marketplace $marketplace. Resolve its source before retrying."
   if [ "$state" = missing ]; then
-    backup "$HOME/.claude/settings.json"
     status INSTALLING "Claude marketplace: $marketplace"
     claude plugin marketplace add "$repo"
     status INSTALLED "Claude marketplace: $marketplace"
@@ -32,7 +30,6 @@ claude_plugin() {
   if [ "$result" -eq 0 ]; then
     status EXISTS "Claude plugin: $plugin"
   else
-    backup "$HOME/.claude/settings.json"
     status INSTALLING "Claude plugin: $plugin"
     claude plugin install "$plugin" --scope user
     status INSTALLED "Claude plugin: $plugin"

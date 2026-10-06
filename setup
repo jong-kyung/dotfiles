@@ -8,7 +8,6 @@ ALL_STAGES=(brew shell git ghostty pi claude)
 STAGES=()
 REQUESTED=
 WORK=
-BACKUPS=
 TERMINAL_STATE=
 AI_PREPARED=false
 
@@ -80,7 +79,7 @@ done
 
 printf '\nSelected: %s\n' "${STAGES[*]}"
 
-printf '\nExisting settings will be backed up before replacement or merge. Identical files are skipped.\n'
+printf '\nExisting settings will be replaced or merged. Identical files are skipped.\n'
 printf 'Selected stages run in the listed order. External installers may request authentication.\n'
 if ! confirm 'Apply all selected stages?'; then
   status CANCELLED 'Nothing changed.'
@@ -94,7 +93,4 @@ for stage in "${STAGES[@]}"; do
   restore_terminal
 done
 
-if [ -n "$BACKUPS" ]; then
-  printf '\nBackups: %s\n' "$BACKUPS"
-fi
 status DONE 'Setup complete. Open a new terminal to load shell changes.'

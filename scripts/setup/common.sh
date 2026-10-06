@@ -76,27 +76,6 @@ select_stages() {
   done
 }
 
-backup() {
-  local target=$1 saved
-  [ -e "$target" ] || [ -L "$target" ] || return 0
-
-  case "$target" in
-    "$HOME"/*) ;;
-    *) die "Refusing backup outside HOME: $target" ;;
-  esac
-
-  if [ -z "$BACKUPS" ]; then
-    mkdir -p "$HOME/.local/state/dotfiles/backups"
-    BACKUPS=$(mktemp -d "$HOME/.local/state/dotfiles/backups/$(date +%Y%m%d-%H%M%S).XXXXXX")
-  fi
-
-  saved="$BACKUPS/${target#"$HOME"/}"
-  if [ ! -e "$saved" ] && [ ! -L "$saved" ]; then
-    mkdir -p "$(dirname "$saved")"
-    cp -pPR "$target" "$saved"
-  fi
-}
-
 copy_file() {
   local source=$1 target=$2 temp result=INSTALLED
   if [ -f "$target" ] && [ ! -L "$target" ] && cmp -s "$source" "$target"; then
@@ -109,13 +88,11 @@ copy_file() {
     result=UPDATED
   fi
 
-  backup "$target"
-
   mkdir -p "$(dirname "$target")"
   temp=$(mktemp "$target.tmp.XXXXXX")
   if ! cp "$source" "$temp" || ! mv -f "$temp" "$target"; then
     rm -f "$temp"
-    die "Could not copy $target (backup preserved)."
+    die "Could not copy $target."
   fi
   status "$result" "$target"
 }
