@@ -54,7 +54,7 @@ Homebrew installs the agent-browser CLI, but setup does not inspect or install b
 
 ## Configuration and backups
 
-Edit files in this repository and rerun the relevant stage. After the single stage approval, setup backs up and replaces managed files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
+Edit files in this repository and rerun the relevant stage. After the single stage approval, setup backs up and replaces managed files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins, except that the Ghostty stage removes its former macOS-specific config after backing it up.
 
 Backups live in `~/.local/state/dotfiles/backups/<run-id>/`, with paths relative to your home directory. Restore files from there when needed. Keep these private backups out of Git.
 
