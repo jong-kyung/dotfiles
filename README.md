@@ -72,7 +72,7 @@ Setup uses standard home-directory paths. Custom `PI_CODING_AGENT_DIR`, `CLAUDE_
 
 ## Updates
 
-Setup uses official installers for Vite+, Bun, Rust, Oh My Zsh, Claude Code, and CodeGraph. It uses documented package-manager commands for the remaining tools, including Homebrew for Mole and Herdr. Existing installations stay in place without automatic upgrades. New installations use each official installer's stable release or default Git ref. Update tools separately through their package managers, such as `brew upgrade`, `vp update -g`, `pi update --extensions`, `claude update`, and `gh skill update --all`.
+Setup uses official installers for Vite+, Bun, Rust, Oh My Zsh, Pi, Claude Code, and CodeGraph. It uses documented package-manager commands for the remaining tools, including Homebrew for Mole and Herdr. Existing installations stay in place without automatic upgrades. New installations use each official installer's stable release or default Git ref. Update tools separately through their package managers, such as `brew upgrade`, `vp update -g`, `claude update`, and `gh skill update --all`. Use `pi update` for the Pi CLI and `pi update --extensions` for its packages.
 
 ## Local checks
 

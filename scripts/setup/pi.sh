@@ -3,9 +3,8 @@ pi_stage() {
   ai_prepare
   if ! has pi; then
     need vp
-    status INSTALLING Pi
-    vp install -g @earendil-works/pi-coding-agent --ignore-scripts
-    status INSTALLED Pi
+    installer https://pi.dev/install.sh /bin/sh
+    export PATH="$HOME/.pi/agent/bin:$PATH"
   else
     status EXISTS Pi
   fi

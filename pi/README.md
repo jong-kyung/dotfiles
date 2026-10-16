@@ -2,6 +2,14 @@
 
 Run `./setup pi` from the repository root, or select `5` in the `./setup` menu. This stage does not install or configure Claude Code. See the [setup guide](../README.md) for prerequisites and setup behavior.
 
+## CLI installation
+
+When Pi is missing, setup downloads `https://pi.dev/install.sh` and runs it with `sh`, using the same official installer as `curl -fsSL https://pi.dev/install.sh | sh`. The installer may ask questions or offer to launch Pi. Run `./setup brew shell` first to prepare Vite+ and its Node and npm runtime. Pi requires Node.js 22.19 or newer.
+
+Setup preserves existing Pi installations without migration or upgrades. To convert an existing npm installation, run the official installer manually. Use `pi update` to update a managed CLI and `pi update --extensions` to update its packages.
+
+The managed launcher lives at `~/.pi/agent/bin/pi`. Setup adds that directory to its own PATH after installation. The official installer handles command discovery for future terminals.
+
 ## Managed resources
 
 - A copy of the shared [AGENTS.md](../AGENTS.md).
