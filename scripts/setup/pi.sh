@@ -5,7 +5,6 @@ pi_stage() {
     need vp
     installer https://pi.dev/install.sh /bin/sh
     export PATH="$HOME/.pi/agent/bin:$PATH"
-    hash -r
   else
     status EXISTS Pi
   fi

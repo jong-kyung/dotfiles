@@ -1,5 +1,5 @@
 # Homebrew Git and Vite+ Node/pnpm take precedence over system tools.
-export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH:$HOME/.pi/agent/bin"
+export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 export ZSH="$HOME/.oh-my-zsh"
 
 ZSH_THEME="agnoster"

@@ -8,7 +8,7 @@ When Pi is missing, setup downloads `https://pi.dev/install.sh` and runs it with
 
 Setup preserves existing Pi installations without migration or upgrades. To convert an existing npm installation, run the official installer manually. Use `pi update` to update a managed CLI and `pi update --extensions` to update its packages.
 
-The managed launcher lives at `~/.pi/agent/bin/pi`. Setup adds that directory to PATH after installation, and the repository's `.zshrc` includes it for future terminals. Run `./setup shell` to deploy the shell configuration.
+The managed launcher lives at `~/.pi/agent/bin/pi`. Setup adds that directory to its own PATH after installation. The official installer handles command discovery for future terminals.
 
 ## Managed resources
 
