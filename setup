@@ -81,6 +81,9 @@ printf '\nSelected: %s\n' "${STAGES[*]}"
 
 printf '\nExisting settings will be replaced or merged. Identical files are skipped.\n'
 printf 'Selected stages run in the listed order. External installers may request authentication.\n'
+case " ${STAGES[*]} " in
+  *" pi "*) printf 'Pi will migrate recognized npm CLI installations, removing the old global CLI package. Pi user data and extension packages stay in place.\n' ;;
+esac
 if ! confirm 'Apply all selected stages?'; then
   status CANCELLED 'Nothing changed.'
   exit 0

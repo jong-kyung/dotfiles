@@ -2,6 +2,18 @@
 
 Run `./setup pi` from the repository root, or select `5` in the `./setup` menu. This stage does not install or configure Claude Code. See the [setup guide](../README.md) for prerequisites and setup behavior.
 
+## CLI installation
+
+Setup downloads `https://pi.dev/install.sh` and runs it with `sh`, using the same official installer as `curl -fsSL https://pi.dev/install.sh | sh`. After the initial setup approval, the Pi installer runs without terminal prompts and does not launch Pi. Node.js 22.19 or newer and npm remain required. Run `./setup brew shell` first on a new Mac.
+
+Setup skips existing managed Pi installations. For an existing npm CLI, it verifies that the active `pi` points to the installed package's declared executable before allowing the official installer to migrate it. The installer verifies the replacement release before removing the old global CLI package. Conversion preserves configuration, credentials, sessions, and extension packages. Normal stage configuration updates still apply afterward.
+
+Unknown executables, unsupported wrappers, invalid installation markers, and insufficient permissions stop the conversion. Some Vite+ shim layouts may need manual migration. Resolve the reported installation or permission problem yourself, then rerun `./setup pi`. Setup does not run sudo or force removal. A failure during final activation can still leave the CLI unavailable after the old package has been removed. Rerun the official installer manually to repair the installation.
+
+The managed launcher lives at `~/.pi/agent/bin/pi`. Setup adds its directory to the stage's PATH, and the repository's `.zshrc` includes it for future terminals. Rerun `./setup shell` to deploy that PATH change to an existing shell configuration. Custom `PI_MANAGED_INSTALL_ROOT` locations are not supported.
+
+Use `pi update` to update the CLI, `pi update --extensions` to update packages, or `pi update --all` for both. To uninstall the managed CLI, run the official installer manually and choose **Uninstall Pi**. This preserves the remaining user data in `~/.pi/agent/`.
+
 ## Managed resources
 
 - A copy of the shared [AGENTS.md](../AGENTS.md).
