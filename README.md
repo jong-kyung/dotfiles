@@ -54,7 +54,7 @@ Homebrew installs the agent-browser CLI, but setup does not inspect or install b
 
 ## Configuration
 
-Edit files in this repository and rerun the relevant stage. After the single stage approval, setup replaces managed files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes converting recognized npm CLI installations to the official managed installation. It also includes normalizing and disabling unsupported legacy SSE servers. The official Pi installer removes the old global CLI package after verifying the replacement release. Pi configuration, credentials, sessions, and extension packages stay in place during this conversion. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup preserves other legacy files, packages, and plugins.
+Edit files in this repository and rerun the relevant stage. After the single stage approval, setup replaces managed files or symlinks without further per-file questions. Identical files are skipped. Git and JSON changes preserve unrelated settings. Approving Pi includes normalizing and disabling unsupported legacy SSE servers. Approving Claude Code includes removing managed legacy notify hook commands from settings. Setup does not delete legacy files, packages, or plugins.
 
 [AGENTS.md](AGENTS.md) is the shared instruction source. Setup copies it to Pi's `~/.pi/agent/AGENTS.md` and Claude's `~/.claude/CLAUDE.md`.
 
@@ -72,7 +72,7 @@ Setup uses standard home-directory paths. Custom `PI_CODING_AGENT_DIR`, `CLAUDE_
 
 ## Updates
 
-Setup uses official installers for Vite+, Bun, Rust, Oh My Zsh, Pi, Claude Code, and CodeGraph. It uses documented package-manager commands for the remaining tools, including Homebrew for Mole and Herdr. Existing installations stay in place without automatic upgrades, except for the one-time conversion of recognized npm Pi CLI installations. Setup skips existing managed Pi installations. New installations use each official installer's stable release or default Git ref. Update tools separately through their package managers, such as `brew upgrade`, `vp update -g`, `claude update`, and `gh skill update --all`. Use `pi update` for the Pi CLI and `pi update --extensions` for its packages.
+Setup uses official installers for Vite+, Bun, Rust, Oh My Zsh, Pi, Claude Code, and CodeGraph. It uses documented package-manager commands for the remaining tools, including Homebrew for Mole and Herdr. Existing installations stay in place without automatic upgrades. New installations use each official installer's stable release or default Git ref. Update tools separately through their package managers, such as `brew upgrade`, `vp update -g`, `claude update`, and `gh skill update --all`. Use `pi update` for the Pi CLI and `pi update --extensions` for its packages.
 
 ## Local checks
 
@@ -83,8 +83,6 @@ done
 zsh -n zsh/zshrc
 node --check scripts/config.mjs
 node --check scripts/setup-query.mjs
-node --check scripts/pi-installer.mjs
-node --test scripts/pi-installer.test.mjs
 ruby -c Brewfile
 node scripts/setup-query.mjs pi-packages pi.json
 node scripts/setup-query.mjs claude-plugins claude.json
