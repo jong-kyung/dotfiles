@@ -9,7 +9,7 @@ Run `./setup claude` from the repository root, or select `6` in the `./setup` me
 - Skills listed in [skills.json](../skills.json). Existing skills and plugins are preserved. Remove the duplicate `gh-cli@kit` integration yourself if it is installed.
 - `hooks/readonly-gh-api.ts`, registered for Bash PreToolUse events.
 - ccstatusline with model, token, usage, and context indicators.
-- Official CodeGraph MCP in `~/.claude.json`, without automatic tool approval.
+- Official CodeGraph MCP in `~/.claude.json`, without automatic tool approval. Setup registers it with `claude mcp add-json` when it is missing and preserves an existing `codegraph` entry.
 
 Setup disables automatic commit/PR attribution, session links, and Remote Control at startup. It preserves unrelated JSON settings and hooks. It does not import model choices, experimental flags, memory settings, or permission consent from another machine.
 

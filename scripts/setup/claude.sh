@@ -24,7 +24,13 @@ claude_stage() {
   copy_file "$ROOT/AGENTS.md" "$HOME/.claude/CLAUDE.md"
   copy_file "$ROOT/claude/hooks/readonly-gh-api.ts" "$HOME/.claude/hooks/readonly-gh-api.ts"
   copy_file "$ROOT/claude/ccstatusline/settings.json" "$HOME/.config/ccstatusline/settings.json"
-  merge_json claude-mcp "$HOME/.claude.json"
+  # Claude writes ~/.claude.json while running, so let its CLI register the server.
+  if claude mcp get codegraph >/dev/null 2>&1; then
+    status EXISTS 'Claude MCP: codegraph'
+  else
+    claude mcp add-json --scope user codegraph '{"type":"stdio","command":"codegraph","args":["serve","--mcp"]}'
+    status INSTALLED 'Claude MCP: codegraph'
+  fi
   merge_json claude "$HOME/.claude/settings.json"
 
   claude --version

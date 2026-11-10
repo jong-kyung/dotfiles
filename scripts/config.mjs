@@ -28,21 +28,18 @@ try {
     config.remoteControlAtStartup = false;
   } else if (mode === 'pi') {
     if (config.extensions !== undefined) config.extensions = config.extensions.filter(value => value !== '-builtin:mcp');
-  } else if (mode === 'pi-mcp' || mode === 'claude-mcp') {
+  } else if (mode === 'pi-mcp') {
     const servers = object(config.mcpServers ?? {}, 'mcpServers');
-    if (mode === 'pi-mcp') {
-      for (const [name, server] of Object.entries(servers)) {
-        object(server, 'MCP server');
-        const legacySse = server.type === 'sse' || (typeof server.url === 'string' && new URL(server.url).pathname.replace(/\/$/, '').endsWith('/sse'));
-        if (legacySse && (server.enabled !== false || server.type === 'sse')) {
-          console.error(`Candidate change: normalize and disable legacy SSE server ${JSON.stringify(name)}; Pi native MCP needs streamable HTTP. Remaining configuration is preserved.`);
-          if (server.type === 'sse') delete server.type;
-          server.enabled = false;
-        }
+    for (const [name, server] of Object.entries(servers)) {
+      object(server, 'MCP server');
+      const legacySse = server.type === 'sse' || (typeof server.url === 'string' && new URL(server.url).pathname.replace(/\/$/, '').endsWith('/sse'));
+      if (legacySse && (server.enabled !== false || server.type === 'sse')) {
+        console.error(`Candidate change: normalize and disable legacy SSE server ${JSON.stringify(name)}; Pi native MCP needs streamable HTTP. Remaining configuration is preserved.`);
+        if (server.type === 'sse') delete server.type;
+        server.enabled = false;
       }
     }
-    servers.codegraph = { type: 'stdio', command: 'codegraph', args: ['serve', '--mcp'] };
-    if (mode === 'pi-mcp') servers.codegraph.exposure = 'direct';
+    servers.codegraph = { type: 'stdio', command: 'codegraph', args: ['serve', '--mcp'], exposure: 'direct' };
     config.mcpServers = servers;
   } else {
     throw new Error(`Unknown configuration: ${mode}`);
