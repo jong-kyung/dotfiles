@@ -7,5 +7,10 @@ describe("readonly gh api", () => {
 		expect(isUnsafeGhApi("gh api repos/acme/app -X DELETE")).toBeTrue();
 		expect(isUnsafeGhApi("gh api repos/acme/app -f state=closed")).toBeTrue();
 		expect(isUnsafeGhApi("gh api graphql -f query='{ viewer { login } }'")).toBeTrue();
+		expect(isUnsafeGhApi('gh api repos/acme/app -X "POST"')).toBeTrue();
+		expect(isUnsafeGhApi("gh api repos/acme/app --method='PATCH'")).toBeTrue();
+		expect(isUnsafeGhApi("gh api repos/acme/app/issues/1 -fstate=closed")).toBeTrue();
+		expect(isUnsafeGhApi("gh api repos/acme/app/issues -Ftitle=x")).toBeTrue();
+		expect(isUnsafeGhApi("gh api repos/acme/app --jq .name")).toBeFalse();
 	});
 });
