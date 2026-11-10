@@ -14,6 +14,5 @@ prompt_context() {
   fi
 }
 
-[[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
 [[ -s "$HOME/.bun/_bun" ]] && source "$HOME/.bun/_bun"
 if [[ -t 0 ]]; then export GPG_TTY=$(tty); fi
