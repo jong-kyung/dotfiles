@@ -39,6 +39,7 @@ The remaining items are managed by setup. Check them after it finishes.
 - [ ] Ghostty, Codiff, Hack Nerd Font, and Noto Sans CJK KR are installed.
 - [ ] Vite+, Bun, Rust, and Oh My Zsh are installed, and `~/.zshrc` matches [zsh/zshrc](zsh/zshrc).
 - [ ] Node LTS and pnpm are available through Vite+.
+- [ ] The Rust stable toolchain is active, and `rustc --version` and `cargo --version` work in a new terminal.
 - [ ] Git preferences from [git/gitconfig](git/gitconfig) are applied, and your Git identity and signing key are configured.
 - [ ] GPG uses pinentry-mac.
 - [ ] The Ghostty configuration from [ghostty/config.ghostty](ghostty/config.ghostty) is applied.
