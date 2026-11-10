@@ -28,8 +28,8 @@ pi_stage() {
   fi
   install_skills pi "$HOME/.pi/agent"
   copy_file "$ROOT/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
-  for file in context files loop notify readonly-gh-api session-breakdown; do
-    copy_file "$ROOT/pi/extensions/$file.ts" "$HOME/.pi/agent/extensions/$file.ts"
+  for file in "$ROOT"/pi/extensions/*.ts; do
+    copy_file "$file" "$HOME/.pi/agent/extensions/${file##*/}"
   done
 
   pi --version
