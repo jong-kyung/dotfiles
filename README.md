@@ -24,6 +24,31 @@ gh auth login
 
 Sign in to Pi and Claude Code yourself after installation. Setup does not copy credentials, private keys, or conversation history.
 
+## Checklist
+
+Setup does not install the apps in the first group, so install them yourself.
+
+- [ ] Visual Studio Code is installed, and the `code` command works in a new terminal.
+- [ ] Raycast is installed.
+- [ ] Notion is installed.
+- [ ] Aside is installed, and the Aside CLI works in a new terminal.
+
+The remaining items are managed by setup. Check them after it finishes.
+
+- [ ] Homebrew packages from the [Brewfile](Brewfile) are present, and `brew bundle check` passes.
+- [ ] Ghostty, Codiff, Hack Nerd Font, and Noto Sans CJK KR are installed.
+- [ ] Vite+, Bun, Rust, and Oh My Zsh are installed, and `~/.zshrc` matches [zsh/zshrc](zsh/zshrc).
+- [ ] Node LTS and pnpm are available through Vite+.
+- [ ] Git preferences from [git/gitconfig](git/gitconfig) are applied, and your Git identity and signing key are configured.
+- [ ] GPG uses pinentry-mac.
+- [ ] The Ghostty configuration from [ghostty/config.ghostty](ghostty/config.ghostty) is applied.
+- [ ] `gh auth status` succeeds, and the gh-stack extension is installed.
+- [ ] Pi is installed with the packages in [pi.json](pi.json), the extensions in `pi/extensions`, and the skills in [skills.json](skills.json).
+- [ ] Claude Code is installed with the plugins in [claude.json](claude.json), its hooks, ccstatusline, and skills.
+- [ ] [AGENTS.md](AGENTS.md) is copied to `~/.pi/agent/AGENTS.md` and `~/.claude/CLAUDE.md`.
+- [ ] CodeGraph appears in `pi mcp list` and in Claude's `/mcp`.
+- [ ] You are signed in to Pi and Claude Code, and your models are selected.
+
 ## Stages
 
 ```sh
