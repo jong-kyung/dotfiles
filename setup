@@ -54,7 +54,8 @@ else
   select_stages
 fi
 
-export PATH="$HOME/.bun/bin:$HOME/.vite-plus/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+# Use the same PATH as the managed zshrc, which may not be installed yet.
+eval "$(grep '^export PATH=' "$ROOT/zsh/zshrc")"
 
 case " ${STAGES[*]} " in
   *" pi "*|*" claude "*)
