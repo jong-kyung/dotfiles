@@ -1,0 +1,27 @@
+onboarding = false
+
+[ui.toast]
+delivery = "system"
+
+[ui]
+show_agent_labels_on_pane_borders = true
+
+# Direct ctrl+alt chords sit beside the default ctrl+b prefix bindings.
+# Letter chords need an English input source because Korean input sends Hangul.
+[keys]
+focus_pane_left = ["prefix+h", "ctrl+alt+left"]
+focus_pane_down = ["prefix+j", "ctrl+alt+down"]
+focus_pane_up = ["prefix+k", "ctrl+alt+up"]
+focus_pane_right = ["prefix+l", "ctrl+alt+right"]
+# Ghostty does not send ctrl+alt+tab as a distinct chord, so use semicolon.
+last_pane = "ctrl+alt+semicolon"
+split_vertical = ["prefix+v", "ctrl+alt+d"]
+split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
+zoom = ["prefix+z", "ctrl+alt+z"]
+close_pane = ["prefix+x", "ctrl+alt+w"]
+new_tab = ["prefix+c", "ctrl+alt+t"]
+previous_tab = ["prefix+p", "ctrl+alt+["]
+next_tab = ["prefix+n", "ctrl+alt+]"]
+previous_workspace = "ctrl+alt+shift+["
+next_workspace = "ctrl+alt+shift+]"
+switch_workspace = "ctrl+alt+shift+1..9"

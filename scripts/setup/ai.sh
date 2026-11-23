@@ -36,6 +36,19 @@ claude_plugin() {
   fi
 }
 
+herdr_integration() {
+  local agent=$1 label=$2 state
+  need herdr
+  state=$(herdr integration status) || die 'Cannot read Herdr integration status.'
+  if grep -q "^$agent: current " <<< "$state"; then
+    status EXISTS "Herdr $label integration"
+  else
+    status INSTALLING "Herdr $label integration"
+    herdr integration install "$agent"
+    status INSTALLED "Herdr $label integration"
+  fi
+}
+
 github_ready() {
   if [ "${GITHUB_READY:-false}" = true ]; then
     return

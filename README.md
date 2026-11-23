@@ -37,12 +37,13 @@ The remaining items are managed by setup. Check them after it finishes.
 
 - [ ] Homebrew packages from the [Brewfile](Brewfile) are present, and `brew bundle check` passes.
 - [ ] Ghostty, Codiff, Hack Nerd Font, and Noto Sans CJK KR are installed.
-- [ ] Vite+, Bun, Rust, and Oh My Zsh are installed, and `~/.zshrc` matches [zsh/zshrc](zsh/zshrc).
+- [ ] Vite+, Bun, Rust, Herdr, and Oh My Zsh are installed, and `~/.zshrc` matches [zsh/zshrc](zsh/zshrc).
 - [ ] Node LTS and pnpm are available through Vite+.
 - [ ] The Rust stable toolchain is active, and `rustc --version` and `cargo --version` work in a new terminal.
 - [ ] Git preferences from [git/gitconfig](git/gitconfig) are applied, and your Git identity and signing key are configured.
 - [ ] GPG uses pinentry-mac.
 - [ ] The Ghostty configuration from [ghostty/config.ghostty](ghostty/config.ghostty) is applied.
+- [ ] The Herdr configuration from [herdr/config.toml](herdr/config.toml) is applied, and `herdr integration status` shows Pi and Claude as current.
 - [ ] `gh auth status` succeeds, and the gh-stack extension is installed.
 - [ ] Pi is installed with the packages in [pi.json](pi.json), the extensions in `pi/extensions`, and the skills in [skills.json](skills.json).
 - [ ] Claude Code is installed with the plugins in [claude.json](claude.json), its hooks, ccstatusline, and skills.
@@ -54,15 +55,16 @@ The remaining items are managed by setup. Check them after it finishes.
 
 ```sh
 ./setup brew                 # Homebrew and Brewfile packages
-./setup shell                # Vite+, Bun, Rust, Oh My Zsh, and .zshrc
+./setup shell                # Vite+, Bun, Rust, Herdr, Oh My Zsh, and .zshrc
 ./setup git                  # Shared Git preferences and GPG pinentry
 ./setup ghostty              # Ghostty configuration
-./setup pi                   # Pi packages, extensions, skills, and CodeGraph MCP
-./setup claude               # Claude Code plugins, hooks, skills, and CodeGraph MCP
+./setup herdr                # Herdr configuration and keybindings
+./setup pi                   # Pi packages, extensions, skills, Herdr integration, and CodeGraph MCP
+./setup claude               # Claude Code plugins, hooks, skills, Herdr integration, and CodeGraph MCP
 ./setup ai                   # Both Pi and Claude Code
 ```
 
-The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Pi, and `6` for Claude Code. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. Only the selected stage names are shown before approval. Installation requires an interactive terminal.
+The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Herdr, `6` for Pi, and `7` for Claude Code. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. Only the selected stage names are shown before approval. Installation requires an interactive terminal.
 
 Run `brew` and `shell` before other stages on a new Mac. Pi and Claude Code require Node because their JSON installation lists are validated before approval. If Node is missing, setup asks you to run `./setup brew shell` first and stops without changes. Rerun a stage after fixing an installation error. Cancelling exits without changes.
 
@@ -98,7 +100,7 @@ Setup uses standard home-directory paths. Custom `PI_CODING_AGENT_DIR`, `CLAUDE_
 
 ## Updates
 
-Setup uses official installers for Vite+, Bun, Rust, Oh My Zsh, Pi, Claude Code, and CodeGraph. It uses documented package-manager commands for the remaining tools, including Homebrew for Mole and Herdr. Existing installations stay in place without automatic upgrades. New installations use each official installer's stable release or default Git ref. Update tools separately through their package managers, such as `brew upgrade`, `vp update -g`, `claude update`, and `gh skill update --all`. Use `pi update` for the Pi CLI and `pi update --extensions` for its packages.
+Setup uses official installers for Vite+, Bun, Rust, Herdr, Oh My Zsh, Pi, Claude Code, and CodeGraph. It uses documented package-manager commands for the remaining tools, including Homebrew for Mole. Existing installations stay in place without automatic upgrades. Herdr agent integrations are the exception, because setup reinstalls them when `herdr integration status` does not report them as current. New installations use each official installer's stable release or default Git ref. Update tools separately through their package managers, such as `brew upgrade`, `vp update -g`, `herdr update`, `claude update`, and `gh skill update --all`. Use `pi update` for the Pi CLI and `pi update --extensions` for its packages.
 
 ## Local checks
 

@@ -32,6 +32,7 @@ claude_stage() {
     status INSTALLED 'Claude MCP: codegraph'
   fi
   merge_json claude "$HOME/.claude/settings.json"
+  herdr_integration claude Claude
 
   claude --version
   codegraph --version

@@ -45,6 +45,12 @@ shell_stage() {
     status EXISTS 'Rust toolchain'
   fi
 
+  if ! has herdr; then
+    installer https://herdr.dev/install.sh /bin/sh
+  else
+    status EXISTS Herdr
+  fi
+
   if [ ! -e "$HOME/.oh-my-zsh" ]; then
     # Keep the installer's starter .zshrc in scratch space; copy_file owns the real one.
     ZSH="$HOME/.oh-my-zsh" ZDOTDIR="$WORK/omz" installer https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh /bin/sh --unattended
@@ -68,4 +74,5 @@ shell_stage() {
   vp env current
   bun --version
   rustc --version
+  herdr --version
 }

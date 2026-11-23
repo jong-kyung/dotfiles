@@ -1,6 +1,6 @@
 # Claude Code configuration
 
-Run `./setup claude` from the repository root, or select `6` in the `./setup` menu. This stage does not install or configure Pi. See the [setup guide](../README.md) for prerequisites and setup behavior.
+Run `./setup claude` from the repository root, or select `7` in the `./setup` menu. This stage does not install or configure Pi. See the [setup guide](../README.md) for prerequisites and setup behavior.
 
 ## Managed resources
 
@@ -8,6 +8,7 @@ Run `./setup claude` from the repository root, or select `6` in the `./setup` me
 - User-scoped plugins listed in [claude.json](../claude.json).
 - Skills listed in [skills.json](../skills.json). Existing skills and plugins are preserved. Remove the duplicate `gh-cli@kit` integration yourself if it is installed.
 - `hooks/readonly-gh-api.ts`, registered for Bash PreToolUse events.
+- The Herdr Claude integration from `herdr integration install claude`, reinstalled when its status is not current.
 - ccstatusline with model, token, usage, and context indicators.
 - Official CodeGraph MCP in `~/.claude.json`, without automatic tool approval. Setup registers it with `claude mcp add-json` when it is missing and preserves an existing `codegraph` entry.
 

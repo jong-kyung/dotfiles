@@ -17,15 +17,7 @@ pi_stage() {
     pi_package "$source" "$HOME/.pi/agent/$installed"
   done <<< "$PI_PACKAGES"
 
-  # Herdr owns this generated integration; do not vendor its files here.
-  if [ ! -f "$HOME/.pi/agent/extensions/herdr-agent-state.ts" ]; then
-    need herdr
-    status INSTALLING 'Herdr Pi integration'
-    herdr integration install pi
-    status INSTALLED 'Herdr Pi integration'
-  else
-    status EXISTS 'Herdr Pi integration'
-  fi
+  herdr_integration pi Pi
   install_skills pi "$HOME/.pi/agent"
   copy_file "$ROOT/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
   for file in "$ROOT"/pi/extensions/*.ts; do

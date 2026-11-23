@@ -51,8 +51,10 @@ confirm() {
 }
 
 select_stages() {
-  local choice i
-  printf '\n1. Homebrew\n2. Shell\n3. Git\n4. Ghostty\n5. Pi\n6. Claude Code\n'
+  local choice i n=${#ALL_STAGES[@]}
+  # shortcut: single-digit range, switch to a numeric check once there are 10 stages.
+  local pattern="^[1-$n](,[1-$n])*$"
+  printf '\n1. Homebrew\n2. Shell\n3. Git\n4. Ghostty\n5. Herdr\n6. Pi\n7. Claude Code\n'
   printf 'On a new Mac, select Homebrew and Shell before other stages.\n'
   while true; do
     printf '\nSelect numbers separated by commas (1,3,5), all, or Enter to cancel: '
@@ -62,8 +64,8 @@ select_stages() {
       '') status CANCELLED 'Nothing changed.'; exit 0 ;;
       all) STAGES=("${ALL_STAGES[@]}"); return ;;
     esac
-    if [[ ! "$choice" =~ ^[1-6](,[1-6])*$ ]]; then
-      status WARNING 'Use numbers 1 through 6 separated by commas, or all.' >&2
+    if [[ ! "$choice" =~ $pattern ]]; then
+      status WARNING "Use numbers 1 through $n separated by commas, or all." >&2
       continue
     fi
     STAGES=()

@@ -5,7 +5,6 @@ brew "gh"
 brew "git"
 brew "git-delta"
 brew "gnupg"
-brew "herdr"
 brew "mole"
 brew "pinentry-mac"
 

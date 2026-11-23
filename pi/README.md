@@ -1,6 +1,6 @@
 # Pi configuration
 
-Run `./setup pi` from the repository root, or select `5` in the `./setup` menu. This stage does not install or configure Claude Code. See the [setup guide](../README.md) for prerequisites and setup behavior.
+Run `./setup pi` from the repository root, or select `6` in the `./setup` menu. This stage does not install or configure Claude Code. See the [setup guide](../README.md) for prerequisites and setup behavior.
 
 ## CLI installation
 
@@ -30,7 +30,7 @@ Existing model, provider, thinking, and theme preferences remain unchanged. On a
 | `extensions/readonly-gh-api.ts` | Restrict mutating gh api requests and GraphQL |
 | `extensions/session-breakdown.ts` | Summarize usage and costs across sessions |
 
-Setup copies these files individually and preserves unrelated extensions. Herdr manages its own generated integration file.
+Setup copies these files individually and preserves unrelated extensions. Herdr manages its own generated integration file, and setup reinstalls it when `herdr integration status` does not report it as current.
 
 Notifications depend on terminal support, macOS permissions, and Focus settings. The gh api guard checks command patterns; it is not a security sandbox.
 
