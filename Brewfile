@@ -7,6 +7,7 @@ brew "git-delta"
 brew "gnupg"
 brew "mole"
 brew "pinentry-mac"
+brew "tailscale"
 
 cask "codiff"
 cask "ghostty"
