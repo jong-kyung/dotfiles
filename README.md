@@ -32,6 +32,7 @@ Setup does not install the apps in the first group, so install them yourself.
 - [ ] Raycast is installed.
 - [ ] Notion is installed.
 - [ ] Aside is installed, and the Aside CLI works in a new terminal.
+- [ ] Tailscale and TermRover are set up by following the [TermRover Tailscale SSH guide](https://termrover.sh/blog/termrover-tailscale-ssh-from-your-phone/), and TermRover on your phone connects to this Mac through Tailscale SSH.
 
 The remaining items are managed by setup. Check them after it finishes.
 
