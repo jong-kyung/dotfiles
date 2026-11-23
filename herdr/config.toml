@@ -22,6 +22,7 @@ close_pane = ["prefix+x", "ctrl+alt+w"]
 new_tab = ["prefix+c", "ctrl+alt+t"]
 previous_tab = ["prefix+p", "ctrl+alt+["]
 next_tab = ["prefix+n", "ctrl+alt+]"]
+new_workspace = ["prefix+shift+n", "ctrl+alt+shift+n"]
 previous_workspace = "ctrl+alt+shift+["
 next_workspace = "ctrl+alt+shift+]"
 switch_workspace = "ctrl+alt+shift+1..9"
