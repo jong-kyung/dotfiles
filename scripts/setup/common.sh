@@ -54,7 +54,7 @@ select_stages() {
   local choice i n=${#ALL_STAGES[@]}
   # shortcut: single-digit range, switch to a numeric check once there are 10 stages.
   local pattern="^[1-$n](,[1-$n])*$"
-  printf '\n1. Homebrew\n2. Shell\n3. Git\n4. Ghostty\n5. Herdr\n6. Pi\n7. Claude Code\n'
+  printf '\n1. Homebrew\n2. Shell\n3. Git\n4. Ghostty\n5. Herdr\n6. Pi\n7. Claude Code\n8. Rex\n'
   printf 'On a new Mac, select Homebrew and Shell before other stages.\n'
   while true; do
     printf '\nSelect numbers separated by commas (1,3,5), all, or Enter to cancel: '

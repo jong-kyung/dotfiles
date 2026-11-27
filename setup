@@ -4,7 +4,7 @@ set -euo pipefail
 umask 077
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-ALL_STAGES=(brew shell git ghostty herdr pi claude)
+ALL_STAGES=(brew shell git ghostty herdr pi claude rex)
 STAGES=()
 REQUESTED=
 WORK=
@@ -23,7 +23,7 @@ usage() {
 for arg in "$@"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;
-    brew|shell|git|ghostty|herdr|pi|claude) REQUESTED="$REQUESTED $arg" ;;
+    brew|shell|git|ghostty|herdr|pi|claude|rex) REQUESTED="$REQUESTED $arg" ;;
     ai) REQUESTED="$REQUESTED pi claude" ;;
     *) usage >&2; die "Unknown argument: $arg" ;;
   esac
