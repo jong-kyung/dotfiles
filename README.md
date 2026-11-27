@@ -32,6 +32,7 @@ Setup does not install the apps in the first group, so install them yourself.
 - [ ] Raycast is installed.
 - [ ] Notion is installed.
 - [ ] Aside is installed, and the Aside CLI works in a new terminal.
+- [ ] Rex is installed, and the `rex` command works in a Rex terminal.
 - [ ] Tailscale and TermRover are set up by following the [TermRover Tailscale SSH guide](https://termrover.sh/blog/termrover-tailscale-ssh-from-your-phone/), and TermRover on your phone connects to this Mac through Tailscale SSH.
 
 The remaining items are managed by setup. Check them after it finishes.
@@ -45,6 +46,7 @@ The remaining items are managed by setup. Check them after it finishes.
 - [ ] GPG uses pinentry-mac.
 - [ ] The Ghostty configuration from [ghostty/config.ghostty](ghostty/config.ghostty) is applied.
 - [ ] The Herdr configuration from [herdr/config.toml](herdr/config.toml) is applied, and `herdr integration status` shows Pi and Claude as current.
+- [ ] The Rex configuration from [rex/init.lua](rex/init.lua) is applied, and `rex config check` reports no errors.
 - [ ] `gh auth status` succeeds, and the gh-stack extension is installed.
 - [ ] Pi is installed with the packages in [pi.json](pi.json), the extensions in `pi/extensions`, and the skills in [skills.json](skills.json).
 - [ ] Claude Code is installed with the plugins in [claude.json](claude.json), its hooks, ccstatusline, and skills.
@@ -62,10 +64,11 @@ The remaining items are managed by setup. Check them after it finishes.
 ./setup herdr                # Herdr configuration and keybindings
 ./setup pi                   # Pi packages, extensions, skills, Herdr integration, and CodeGraph MCP
 ./setup claude               # Claude Code plugins, hooks, skills, Herdr integration, and CodeGraph MCP
+./setup rex                  # Rex keybindings
 ./setup ai                   # Both Pi and Claude Code
 ```
 
-The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Herdr, `6` for Pi, and `7` for Claude Code. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. Only the selected stage names are shown before approval. Installation requires an interactive terminal.
+The menu numbers are `1` for Homebrew, `2` for Shell, `3` for Git, `4` for Ghostty, `5` for Herdr, `6` for Pi, `7` for Claude Code, and `8` for Rex. Selected stages run once each in that order, regardless of input order. Explicit stage arguments skip the menu but still require one approval. Only the selected stage names are shown before approval. Installation requires an interactive terminal.
 
 Run `brew` and `shell` before other stages on a new Mac. Pi and Claude Code require Node because their JSON installation lists are validated before approval. If Node is missing, setup asks you to run `./setup brew shell` first and stops without changes. Rerun a stage after fixing an installation error. Cancelling exits without changes.
 
